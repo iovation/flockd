@@ -25,7 +25,9 @@ type DB struct {
 	dirs *sync.Map
 }
 
-// New creates a new DB, with the specified directory as the root.
+// New creates a new DB, with the specified directory as the root. If the
+// directory does not exist, it will be created. Returns an error if the
+// directory creation fails.
 func New(dir string) (*DB, error) {
 	root, err := newDir(dir)
 	if err != nil {
@@ -34,8 +36,12 @@ func New(dir string) (*DB, error) {
 	return &DB{root: root, dirs: &sync.Map{}}, nil
 }
 
-// Sub returns a subdirectory of the DB. Keys and values can be written
-// directly to the directory. Think of directories as key spaces.
+// Sub returns a subdirectory of the DB. Keys and values can be written directly
+// to the directory. Think of directories as key spaces. Specify multiple
+// directories to create a deeper subdirectory. If the directory does not exist,
+// it will be created. Returns an error if the directory creation fails. If the
+// directory has been fetched previously, it will be returned immediately
+// without checking for the existence of the directory on the file system.
 func (db *DB) Sub(dirs []string) (*Dir, error) {
 	path := filepath.Join(dirs...)
 	if sub, ok := db.dirs.Load(path); ok {
