@@ -1,5 +1,5 @@
-fskv 0.1.0
-==========
+dirdb 0.1.0
+===========
 
-Simple file system key value store.
+Simple file system directory and file key value store.
 
