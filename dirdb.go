@@ -1,3 +1,11 @@
+/*
+
+Package dirdb provides a simple file system directory-based key/value store. It
+treats subdirectories as key spaces, keys as file names, and values as file
+contents. It uses shared and exclusive file system locks on the keys (files) to
+ensure concurrcy safety.
+
+*/
 package dirdb
 
 import (
@@ -6,24 +14,29 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
 
-type DirDB struct {
+// DB defines a file system directory as a simple key/value store.
+type DB struct {
 	root *Dir
 	dirs *sync.Map
 }
 
-func New(dir string) (*DirDB, error) {
+// New creates a new DB, with the specified directory as the root.
+func New(dir string) (*DB, error) {
 	root, err := newDir(dir)
 	if err != nil {
 		return nil, err
 	}
-	return &DirDB{root: root, dirs: &sync.Map{}}, nil
+	return &DB{root: root, dirs: &sync.Map{}}, nil
 }
 
-func (db *DirDB) Sub(dirs []string) (*Dir, error) {
+// Sub returns a subdirectory of the DB. Keys and values can be written
+// directly to the directory. Think of directories as key spaces.
+func (db *DB) Sub(dirs []string) (*Dir, error) {
 	path := filepath.Join(dirs...)
 	if sub, ok := db.dirs.Load(path); ok {
 		return sub.(*Dir), nil
@@ -45,23 +58,37 @@ func newDir(path string) (*Dir, error) {
 	return &Dir{dir: path}, nil
 }
 
-func (db *DirDB) Get(key string) ([]byte, error) {
+// Get returns the value for the key by reading the file named for key from the
+// root directory.
+func (db *DB) Get(key string) ([]byte, error) {
 	return db.root.Get(key)
 }
 
-func (db *DirDB) Set(key string, val []byte) error {
+// Set sets the value for the key by writing it to the file named for key in the
+// root directory.
+func (db *DB) Set(key string, val []byte) error {
 	return db.root.Set(key, val)
 }
 
-func (db *DirDB) Delete(key string) error {
+// Delete deletes the key and its value by deleting the file named for key in
+// the root directory.
+func (db *DB) Delete(key string) error {
 	return db.root.Delete(key)
 }
 
+// Dir represents a directoring into which keys and values can be written.
 type Dir struct {
 	dir string
 }
 
+// Get returns the value for the key by reading the file named for key from the
+// directory.
 func (dir *Dir) Get(key string) ([]byte, error) {
+	// Make sure there is no directory separator.
+	if strings.ContainsRune(key, os.PathSeparator) {
+		return nil, os.ErrInvalid
+	}
+
 	// Open the file.
 	file := filepath.Join(dir.dir, key)
 	fh, err := os.Open(file)
@@ -88,7 +115,14 @@ func (dir *Dir) Get(key string) ([]byte, error) {
 	return val, nil
 }
 
+// Set sets the value for the key by writing it to the file named for key in the
+// directory.
 func (dir *Dir) Set(key string, value []byte) error {
+	// Make sure there is no directory separator.
+	if strings.ContainsRune(key, os.PathSeparator) {
+		return os.ErrInvalid
+	}
+
 	// Create a temporary file to write to.
 	file := filepath.Join(dir.dir, key)
 	tmp := file + ".tmp"
@@ -112,7 +146,7 @@ func (dir *Dir) Set(key string, value []byte) error {
 
 	// XXX Is it necessary to lock the destination file?
 	// Open the key file.
-	fh2, err := os.OpenFile(tmp, os.O_CREATE|os.O_RDONLY, 0600)
+	fh2, err := os.OpenFile(file, os.O_CREATE|os.O_RDONLY, 0600)
 	if err != nil {
 		return err
 	}
@@ -124,12 +158,20 @@ func (dir *Dir) Set(key string, value []byte) error {
 		return err
 	}
 	defer lock2.Unlock()
+	// XXX Destination file lock code end.
 
 	// Move the file.
 	return os.Rename(tmp, file)
 }
 
+// Delete deletes the key and its value by deleting the file named for key in
+// the directory.
 func (dir *Dir) Delete(key string) error {
+	// Make sure there is no directory separator.
+	if strings.ContainsRune(key, os.PathSeparator) {
+		return os.ErrInvalid
+	}
+
 	// Open the file.
 	file := filepath.Join(dir.dir, key)
 	fh, err := os.Open(file)
