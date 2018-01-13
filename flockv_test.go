@@ -11,6 +11,14 @@ import (
 	"testing"
 )
 
+var timeoutErr string
+
+func init() {
+	cx, cancel := context.WithTimeout(context.Background(), 0)
+	cancel()
+	timeoutErr = cx.Err().Error()
+}
+
 type TS struct {
 	db *DB
 	suite.Suite
@@ -186,9 +194,6 @@ func (s *TS) TestLock() {
 
 	val, err := s.db.Get(key)
 	s.Nil(val, "Should have no value from locked file")
-	cx, cancel := context.WithTimeout(context.Background(), 0)
-	cancel()
-	timeoutErr := cx.Err().Error()
 	s.EqualError(err, timeoutErr, "Should have timeout error from Get")
 	s.EqualError(s.db.Set(key, nil), timeoutErr, "Should have timeout error from Set")
 	s.fileNotExists(path + tmpExt())
@@ -248,6 +253,17 @@ func (s *TS) TestDirKeyErrors() {
 	s.DirExists(subPath, "Directory %q should still exist", dirName)
 	s.NotNil(s.db.Delete(dirName), "Should have an error from Delete for directory")
 	s.DirExists(subPath, "Directory %q should still exist", dirName)
+
+	// Make sure it fails on a directory with the temp filename, too.
+	tmpFile := "bar" + tmpExt()
+	_, err = s.db.Table(tmpFile)
+	if err != nil {
+		s.T().Fatal("Table", err)
+	}
+	s.NotNil(
+		s.db.Set("bar", []byte{}),
+		"Should have error directory in the way of a temp file",
+	)
 }
 
 func (s *TS) TestDirErrors() {
@@ -308,6 +324,26 @@ func (s *TS) TestKeys() {
 		)
 		s.fileNotExists(path)
 	}
+}
+
+func (s *TS) TestTempLock() {
+	key := "foo"
+	path := filepath.Join(s.db.root.path, key)
+	tmp := path + tmpExt()
+
+	// Take an exclusive lock on the temp file.
+	fh, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY, 0600)
+	if err != nil {
+		s.T().Fatal("open", err)
+	}
+	lock, err := lockFile(fh, true)
+	if err != nil {
+		s.T().Fatal("lockFile", err)
+	}
+	defer lock.Unlock()
+
+	s.EqualError(s.db.Set(key, nil), timeoutErr, "Should have timeout error from Set")
+	s.fileNotExists(path)
 }
 
 func (s *TS) fileContains(path string, data []byte) bool {
