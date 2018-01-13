@@ -1,12 +1,11 @@
 /*
 
-Package dirdb provides a simple file system directory-based key/value store. It
-treats subdirectories as key spaces, keys as file names, and values as file
-contents. It uses shared and exclusive file system locks on the keys (files) to
-ensure concurrcy safety.
+Package flockv (pronounced “Flock KV”) provides a simple file system-based
+key/value database that uses file locking for concurrency safety. Keys
+correpond to files, values to their contents, and tables to directories.
 
 */
-package dirdb
+package flockv
 
 import (
 	"context"
@@ -19,47 +18,54 @@ import (
 	"time"
 )
 
-// DB defines a file system directory as a simple key/value store.
+// DB defines a file system directory as the root for a simple key/value
+// database.
 type DB struct {
-	root *Dir
-	dirs *sync.Map
+	root   *Table
+	tables *sync.Map
 }
 
-// New creates a new DB, with the specified directory as the root. If the
-// directory does not exist, it will be created. Returns an error if the
-// directory creation fails.
+// Table represents a diretory into which keys and values can be written.
+type Table struct {
+	path string
+}
+
+// New creates a new key/value database, with the specified directory as the
+// root. If the directory does not exist, it will be created. Returns an error
+// if the directory creation fails.
 func New(dir string) (*DB, error) {
-	root, err := newDir(dir)
+	root, err := newTable(dir)
 	if err != nil {
 		return nil, err
 	}
-	return &DB{root: root, dirs: &sync.Map{}}, nil
+	return &DB{root: root, tables: &sync.Map{}}, nil
 }
 
-// Sub returns a subdirectory of the DB. Keys and values can be written directly
-// to the directory. Think of directories as key spaces. Pass a path created by
-// filepath.Join to create a deeper subdirectory. If the directory does not
-// exist, it will be created. Returns an error if the directory creation fails.
-// If the directory has been fetched previously, it will be returned immediately
-// without checking for the existence of the directory on the file system.
-func (db *DB) Sub(dir string) (*Dir, error) {
-	if sub, ok := db.dirs.Load(dir); ok {
-		return sub.(*Dir), nil
+// Table returns creates a table in the database. The table corresponds to a
+// subdirectory of the database root directory. Keys and values can be written
+// directly to the table. Pass a path created by filepath.Join to create a
+// deeper subdirectory. If the directory does not exist, it will be created.
+// Returns an error if the directory creation fails. If the table has been
+// created previously, it will be returned immediately without checking for the
+// existence of the directory on the file system.
+func (db *DB) Table(subdir string) (*Table, error) {
+	if table, ok := db.tables.Load(subdir); ok {
+		return table.(*Table), nil
 	}
 
-	sub, err := newDir(filepath.Join(db.root.dir, dir))
+	table, err := newTable(filepath.Join(db.root.path, subdir))
 	if err != nil {
 		return nil, err
 	}
-	db.dirs.Store(dir, sub)
-	return sub, nil
+	db.tables.Store(subdir, table)
+	return table, nil
 }
 
-func newDir(path string) (*Dir, error) {
+func newTable(path string) (*Table, error) {
 	if err := os.MkdirAll(path, 0755); err != nil {
 		return nil, err
 	}
-	return &Dir{dir: path}, nil
+	return &Table{path: path}, nil
 }
 
 // Get returns the value for the key by reading the file named for key from the
@@ -80,21 +86,16 @@ func (db *DB) Delete(key string) error {
 	return db.root.Delete(key)
 }
 
-// Dir represents a directoring into which keys and values can be written.
-type Dir struct {
-	dir string
-}
-
 // Get returns the value for the key by reading the file named for key from the
-// directory.
-func (dir *Dir) Get(key string) ([]byte, error) {
+// table directory.
+func (table *Table) Get(key string) ([]byte, error) {
 	// Make sure there is no directory separator.
 	if strings.ContainsRune(key, os.PathSeparator) {
 		return nil, os.ErrInvalid
 	}
 
 	// Open the file.
-	file := filepath.Join(dir.dir, key)
+	file := filepath.Join(table.path, key)
 	fh, err := os.Open(file)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -120,15 +121,15 @@ func (dir *Dir) Get(key string) ([]byte, error) {
 }
 
 // Set sets the value for the key by writing it to the file named for key in the
-// directory.
-func (dir *Dir) Set(key string, value []byte) error {
+// table directory.
+func (table *Table) Set(key string, value []byte) error {
 	// Make sure there is no directory separator.
 	if strings.ContainsRune(key, os.PathSeparator) {
 		return os.ErrInvalid
 	}
 
 	// Create a temporary file to write to.
-	file := filepath.Join(dir.dir, key)
+	file := filepath.Join(table.path, key)
 	tmp := file + ".tmp"
 	fh, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY, 0600)
 	if err != nil {
@@ -170,15 +171,15 @@ func (dir *Dir) Set(key string, value []byte) error {
 }
 
 // Delete deletes the key and its value by deleting the file named for key in
-// the directory.
-func (dir *Dir) Delete(key string) error {
+// the table directory.
+func (table *Table) Delete(key string) error {
 	// Make sure there is no directory separator.
 	if strings.ContainsRune(key, os.PathSeparator) {
 		return os.ErrInvalid
 	}
 
 	// Open the file.
-	file := filepath.Join(dir.dir, key)
+	file := filepath.Join(table.path, key)
 	fh, err := os.Open(file)
 	if err != nil {
 		if os.IsNotExist(err) {
