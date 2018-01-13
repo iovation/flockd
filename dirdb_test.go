@@ -165,11 +165,10 @@ func (s *TS) TestSubs() {
 	}
 }
 
-func (s *TS) TestGetLock() {
+func (s *TS) TestLock() {
 	key := "whatever"
 	value := []byte("🤘🎉💩")
 	path := filepath.Join(s.db.root.dir, key)
-
 	s.Nil(s.db.Set(key, value), "Set %v", key)
 
 	// Take an exclusive lock on the file.
@@ -188,6 +187,8 @@ func (s *TS) TestGetLock() {
 	cancel()
 	timeoutErr := cx.Err().Error()
 	s.EqualError(err, timeoutErr, "Should have timeout error from Get")
+	s.EqualError(s.db.Set(key, nil), timeoutErr, "Should have timeout error from Set")
+	s.EqualError(s.db.Delete(key), timeoutErr, "Should have timeout error from Delete")
 
 	// Now take a shared lock.
 	lock.Unlock()
@@ -202,9 +203,11 @@ func (s *TS) TestGetLock() {
 	val, err = s.db.Get(key)
 	s.Nil(err, "Should have no error from Get")
 	s.Equal(string(value), string(val), "Should have value from sharelocked file")
+	s.EqualError(s.db.Set(key, nil), timeoutErr, "Should have timeout error from Set")
+	s.EqualError(s.db.Delete(key), timeoutErr, "Should have timeout error from Delete")
 }
 
-func (s *TS) TestKeyErrors() {
+func (s *TS) TestKeyPathErrors() {
 	badKey := filepath.Join("foo", "bar")
 	val, err := s.db.Get(badKey)
 	s.Nil(val, "Should have no value from Get for bad key")

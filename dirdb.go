@@ -159,6 +159,7 @@ func (dir *Dir) Set(key string, value []byte) error {
 	// Take an exclusive lock on the key file.
 	lock2, err := lockFile(fh2, true)
 	if err != nil {
+		os.Remove(tmp)
 		return err
 	}
 	defer lock2.Unlock()
