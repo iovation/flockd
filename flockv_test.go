@@ -261,6 +261,45 @@ func (s *TS) TestPathErrors() {
 	)
 }
 
+func (s *TS) TestOpenErrors() {
+	key := "deny"
+	path := filepath.Join(s.db.root.path, key)
+	s.Nil(s.db.Set(key, []byte("whatever")), "Set %v", key)
+
+	// Remove all permissions.
+	if err := os.Chmod(path, 0000); err != nil {
+		s.T().Fatal("Chmod", err)
+	}
+
+	val, err := s.db.Get(key)
+	s.Nil(val, "Should have no value from Get")
+	s.True(os.IsPermission(err), "Should have permission error from Get")
+	s.True(os.IsPermission(s.db.Set(key, nil)), "Should have peermission error from Set")
+	s.True(os.IsPermission(s.db.Delete(key)), "Should have peermission error from Delete")
+}
+
+func (s *TS) TestKeys() {
+	for chars, key := range map[string]string{
+		"nothing interesting": "foo",
+		"space":               "foo bar",
+		"question mark":       "foo?bar",
+		"bang":                "foo!bar",
+		"emoji":               "🤘🎉💩",
+	} {
+		s.Nil(
+			s.db.Set(key, []byte(key)),
+			"Should get no error setting key with %v", chars,
+		)
+		val, err := s.db.Get(key)
+		s.Nil(err, "Should have no error getting key with %v", chars)
+		s.Equal(string(val), key, "Should have value for with with %v", chars)
+		s.Nil(
+			s.db.Delete(key),
+			"Should get no error deleting key with %v", chars,
+		)
+	}
+}
+
 func (s *TS) fileContains(path string, data []byte) bool {
 	content, err := ioutil.ReadFile(path)
 	if err != nil {
