@@ -43,16 +43,15 @@ func New(dir string) (*DB, error) {
 // If the directory has been fetched previously, it will be returned immediately
 // without checking for the existence of the directory on the file system.
 func (db *DB) Sub(dir string) (*Dir, error) {
-	path := filepath.Join(db.root.dir, dir)
-	if sub, ok := db.dirs.Load(path); ok {
+	if sub, ok := db.dirs.Load(dir); ok {
 		return sub.(*Dir), nil
 	}
 
-	sub, err := newDir(path)
+	sub, err := newDir(filepath.Join(db.root.dir, dir))
 	if err != nil {
 		return nil, err
 	}
-	db.dirs.Store(path, sub)
+	db.dirs.Store(dir, sub)
 	return sub, nil
 }
 

@@ -119,6 +119,11 @@ func (s *TS) TestSubs() {
 		sub, err := s.db.Sub(subDir)
 		s.Nil(err, "Should have no error creating Sub %v", subDir)
 		s.DirExists(subPath, "Directory %q should now exist", subDir)
+
+		mapped, ok := s.db.dirs.Load(subDir)
+		s.True(ok, "Should have loaded Sub %v", subDir)
+		s.Equal(sub, mapped, "Should have retained %q", subDir)
+
 		val := []byte(subDir)
 		for _, key := range []string{"strongrrl", "theory", "lily"} {
 			keyPath := filepath.Join(sub.dir, key)
