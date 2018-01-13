@@ -159,6 +159,24 @@ func (s *TS) TestSubs() {
 	}
 }
 
+func (s *TS) TestPathErrors() {
+	db, err := New("README.md")
+	s.Nil(db, "Should have no db for non-directory")
+	s.EqualError(
+		err, "mkdir README.md: not a directory",
+		"Should have error for non-directory",
+	)
+
+	s.db.Set("foo", []byte{})
+	sub, err := s.db.Sub("foo")
+	s.Nil(sub, "Should have no sub for non-directory")
+	s.EqualError(
+		err,
+		fmt.Sprintf("mkdir %v: not a directory", filepath.Join(s.db.root.dir, "foo")),
+		"Should have error for non-directory",
+	)
+}
+
 func (s *TS) fileContains(path string, data []byte) bool {
 	content, err := ioutil.ReadFile(path)
 	if err != nil {
