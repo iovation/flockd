@@ -32,8 +32,8 @@ type Table struct {
 }
 
 // New creates a new key/value database, with the specified directory as the
-// root. If the directory does not exist, it will be created. Returns an error
-// if the directory creation fails.
+// root table. If the directory does not exist, it will be created. Returns an
+// error if the directory creation fails.
 func New(dir string) (*DB, error) {
 	root, err := newTable(dir)
 	if err != nil {
@@ -54,7 +54,7 @@ func (db *DB) Table(subdir string) (*Table, error) {
 		return table.(*Table), nil
 	}
 
-	table, err := newTable(filepath.Join(db.root.path, subdir))
+	table, err := newTable(filepath.Join(db.root.path, subdir+"-tab"))
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +101,7 @@ func (table *Table) Get(key string) ([]byte, error) {
 	}
 
 	// Open the file.
-	file := filepath.Join(table.path, key)
+	file := filepath.Join(table.path, key+".kv")
 	fh, err := os.Open(file)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -147,7 +147,7 @@ func (table *Table) Set(key string, value []byte) error {
 	}
 
 	// Create a temporary file to write to.
-	file := filepath.Join(table.path, key)
+	file := filepath.Join(table.path, key+".kv")
 	tmp := file + ".tmp" + strconv.Itoa(os.Getpid())
 	fh, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY, 0600)
 	if err != nil {
@@ -202,7 +202,7 @@ func (table *Table) Delete(key string) error {
 	}
 
 	// Open the file.
-	file := filepath.Join(table.path, key)
+	file := filepath.Join(table.path, key+".kv")
 	fh, err := os.Open(file)
 	if err != nil {
 		if os.IsNotExist(err) {

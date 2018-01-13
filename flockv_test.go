@@ -62,7 +62,7 @@ func (s *TS) TestBasic() {
 func (s *TS) TestFiles() {
 	db := s.db
 	key := "foo"
-	file := filepath.Join(db.root.path, key)
+	file := filepath.Join(db.root.path, key+".kv")
 	s.fileNotExists(file)
 
 	// Set should create a file.
@@ -79,7 +79,7 @@ func (s *TS) TestFiles() {
 func (s *TS) TestTable() {
 	db := s.db
 	dirName := "realm"
-	subPath := filepath.Join(db.root.path, dirName)
+	subPath := filepath.Join(db.root.path, dirName+"-tab")
 	s.fileNotExists(subPath)
 
 	tab, err := s.db.Table(dirName)
@@ -87,7 +87,7 @@ func (s *TS) TestTable() {
 	s.DirExists(subPath, "Directory %q should now exist", dirName)
 
 	key := "xoxoxoxoxoxo"
-	file := filepath.Join(subPath, key)
+	file := filepath.Join(subPath, key+".kv")
 	s.fileNotExists(file)
 
 	// Set should create a file.
@@ -118,7 +118,7 @@ func (s *TS) TestTables() {
 
 	// Fill out a number of subdirectories.
 	for _, subDir := range tables {
-		subPath := filepath.Join(s.db.root.path, subDir)
+		subPath := filepath.Join(s.db.root.path, subDir+"-tab")
 		s.fileNotExists(subPath)
 		tab, err := s.db.Table(subDir)
 		s.Nil(err, "Should have no error creating Table %v", subDir)
@@ -130,8 +130,8 @@ func (s *TS) TestTables() {
 
 		val := []byte(subDir)
 		for _, key := range []string{"strongrrl", "theory", "lily"} {
-			keyPath := filepath.Join(tab.path, key)
-			keyTable := filepath.Join(subDir, key)
+			keyPath := filepath.Join(tab.path, key+".kv")
+			keyTable := filepath.Join(subDir, key+".kv")
 			s.fileNotExists(keyPath)
 			s.Nil(tab.Set(key, val), "Should set val in %q", keyTable)
 			s.FileExists(keyPath, "File %q should now exist", keyTable)
@@ -149,13 +149,13 @@ func (s *TS) TestTables() {
 		s.Nil(err, "Should have no error creating Table %v", subDir)
 		val := []byte(subDir)
 		for _, key := range []string{"strongrrl", "theory", "lily"} {
-			keyTable := filepath.Join(subDir, key)
+			keyTable := filepath.Join(subDir, key+".kv")
 			got, err := tab.Get(key)
 			s.Nil(err, "Should have no error fetching %q again", keyTable)
 			s.Equal(val, got, "Should again have the value from %q", keyTable)
 
 			// Delete should delete the file.
-			keyPath := filepath.Join(tab.path, key)
+			keyPath := filepath.Join(tab.path, key+".kv")
 			s.Nil(tab.Delete(key), "Should have no error deleting %q", keyTable)
 			s.fileNotExists(keyPath)
 			got, err = tab.Get(key)
@@ -171,7 +171,7 @@ func (s *TS) TestTables() {
 func (s *TS) TestLock() {
 	key := "whatever"
 	value := []byte("🤘🎉💩")
-	path := filepath.Join(s.db.root.path, key)
+	path := filepath.Join(s.db.root.path, key+".kv")
 	s.Nil(s.db.Set(key, value), "Set %v", key)
 
 	// Take an exclusive lock on the file.
@@ -232,25 +232,24 @@ func (s *TS) TestKeyPathErrors() {
 func (s *TS) TestDirKeyErrors() {
 	// A directory should not work as a key.
 	dirName := "aDirectory"
-	subPath := filepath.Join(s.db.root.path, dirName)
-	_, err := s.db.Table(dirName)
-	s.Nil(err, "Should have no error from Table")
-	s.DirExists(subPath, "Directory %q should now exist", dirName)
+	dir := filepath.Join(s.db.root.path, dirName+".kv")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		s.T().Fatal("MkdirAll", err)
+	}
 
 	val, err := s.db.Get(dirName)
 	s.Nil(val, "Should have no value from Get for directory")
 	s.NotNil(err, "Should have an error from Get for directory")
-	s.DirExists(subPath, "Directory %q should still exist", dirName)
+	s.DirExists(dir, "Directory %q should still exist", dirName)
 	s.NotNil(s.db.Set(dirName, nil), "Should have an error from Set for directory")
-	s.DirExists(subPath, "Directory %q should still exist", dirName)
+	s.DirExists(dir, "Directory %q should still exist", dirName)
 	s.NotNil(s.db.Delete(dirName), "Should have an error from Delete for directory")
-	s.DirExists(subPath, "Directory %q should still exist", dirName)
+	s.DirExists(dir, "Directory %q should still exist", dirName)
 
 	// Make sure it fails on a directory with the temp filename, too.
-	tmpFile := "bar" + tmpExt()
-	_, err = s.db.Table(tmpFile)
-	if err != nil {
-		s.T().Fatal("Table", err)
+	tmpFile := filepath.Join(s.db.root.path, "bar.kv"+tmpExt())
+	if err := os.MkdirAll(tmpFile, 0755); err != nil {
+		s.T().Fatal("MkdirAll", err)
 	}
 	s.NotNil(
 		s.db.Set("bar", []byte{}),
@@ -266,19 +265,22 @@ func (s *TS) TestDirErrors() {
 		"Should have error for non-directory",
 	)
 
-	s.db.Set("foo", []byte{})
+	file := filepath.Join(s.db.root.path, "foo-tab")
+	if _, err := os.Create(file); err != nil {
+		s.T().Fatal("os.Create", err)
+	}
 	tab, err := s.db.Table("foo")
 	s.Nil(tab, "Should have no tab for non-directory")
 	s.EqualError(
 		err,
-		fmt.Sprintf("mkdir %v: not a directory", filepath.Join(s.db.root.path, "foo")),
+		fmt.Sprintf("mkdir %v: not a directory", file),
 		"Should have error for non-directory",
 	)
 }
 
 func (s *TS) TestOpenErrors() {
 	key := "deny"
-	path := filepath.Join(s.db.root.path, key)
+	path := filepath.Join(s.db.root.path, key+".kv")
 	s.Nil(s.db.Set(key, []byte("whatever")), "Set %v", key)
 
 	// Remove all permissions.
@@ -301,7 +303,7 @@ func (s *TS) TestKeys() {
 		"bang":                "foo!bar",
 		"emoji":               "🤘🎉💩",
 	} {
-		path := filepath.Join(s.db.root.path, key)
+		path := filepath.Join(s.db.root.path, key+".kv")
 		s.Nil(
 			s.db.Set(key, []byte(key)),
 			"Should get no error setting key with %v", chars,
@@ -320,7 +322,7 @@ func (s *TS) TestKeys() {
 
 func (s *TS) TestTempLock() {
 	key := "foo"
-	path := filepath.Join(s.db.root.path, key)
+	path := filepath.Join(s.db.root.path, key+".kv")
 	tmp := path + tmpExt()
 
 	// Take an exclusive lock on the temp file.
