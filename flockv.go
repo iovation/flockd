@@ -88,7 +88,12 @@ func (db *DB) Delete(key string) error {
 }
 
 // Get returns the value for the key by reading the file named for key from the
-// table directory.
+// table directory. The key must not contain a path separator character; if it
+// does, os.ErrInvalid will be returned. If the file does not exist,
+// os.ErrNotExist will be returned. For concurrency safetey, Get acquires a
+// shared file system lock on the file before reading its contents. If the file
+// has an exclusive lock on it, Get will spend up to a millisecond waiting for
+// the shared lock before returning a context.DeadlineExceeded error.
 func (table *Table) Get(key string) ([]byte, error) {
 	// Make sure there is no directory separator.
 	if strings.ContainsRune(key, os.PathSeparator) {
@@ -122,7 +127,19 @@ func (table *Table) Get(key string) ([]byte, error) {
 }
 
 // Set sets the value for the key by writing it to the file named for key in the
-// table directory.
+// table directory. The key must not contain a path separator character; if it
+// does, os.ErrInvalid will be returned.
+//
+// To set the value, Set first creates a temporary file with the key name, plus
+// ".tmp" and the PID appended to it, and tries to acquire an exclusive lock. If
+// the temporary file already has exclusive lock, Set will wait up to a
+// millisecond to acquire the lock before returning a context.DeadlineExceeded
+// error. Once it has the lock, it writes the value to the temporary file.
+//
+// Next, it tries to acquire an exclusive lock on the file with the key name,
+// again waiting  up to a millisecond before returning a
+// context.DeadlineExceeded error. Once it has the lock, it moves the temporary
+// file to the new file.
 func (table *Table) Set(key string, value []byte) error {
 	// Make sure there is no directory separator.
 	if strings.ContainsRune(key, os.PathSeparator) {
@@ -172,7 +189,12 @@ func (table *Table) Set(key string, value []byte) error {
 }
 
 // Delete deletes the key and its value by deleting the file named for key in
-// the table directory.
+// the table directory.  The key must not contain a path separator character; if
+// it does, os.ErrInvalid will be returned. Before deleting the file, Delete
+// tries to acquire an exclusive lock. If the file already has exclusive lock,
+// Delete will wait up to a millisecond to acquire the lock before returning a
+// context.DeadlineExceeded error. Once it has acquired the lock, it deletes the
+// file.
 func (table *Table) Delete(key string) error {
 	// Make sure there is no directory separator.
 	if strings.ContainsRune(key, os.PathSeparator) {
@@ -207,6 +229,8 @@ func (table *Table) Delete(key string) error {
 	return os.Remove(file)
 }
 
+// lockFile tries to acquire a shared or exclusive lock on a file, waiting up to
+// a millisecond for the lock, and returns the lock or an error.
 func lockFile(fh *os.File, exclusive bool) (*flock.Flock, error) {
 	flock := flock.New(fh)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)

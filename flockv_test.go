@@ -11,14 +11,6 @@ import (
 	"testing"
 )
 
-var timeoutErr string
-
-func init() {
-	cx, cancel := context.WithTimeout(context.Background(), 0)
-	cancel()
-	timeoutErr = cx.Err().Error()
-}
-
 type TS struct {
 	db *DB
 	suite.Suite
@@ -194,10 +186,10 @@ func (s *TS) TestLock() {
 
 	val, err := s.db.Get(key)
 	s.Nil(val, "Should have no value from locked file")
-	s.EqualError(err, timeoutErr, "Should have timeout error from Get")
-	s.EqualError(s.db.Set(key, nil), timeoutErr, "Should have timeout error from Set")
+	s.Equal(err, context.DeadlineExceeded, "Should have timeout error from Get")
+	s.Equal(s.db.Set(key, nil), context.DeadlineExceeded, "Should have timeout error from Set")
 	s.fileNotExists(path + tmpExt())
-	s.EqualError(s.db.Delete(key), timeoutErr, "Should have timeout error from Delete")
+	s.Equal(s.db.Delete(key), context.DeadlineExceeded, "Should have timeout error from Delete")
 	s.FileExists(path, "The file should still be present")
 
 	// Now take a shared lock.
@@ -213,9 +205,9 @@ func (s *TS) TestLock() {
 	val, err = s.db.Get(key)
 	s.Nil(err, "Should have no error from Get")
 	s.Equal(string(value), string(val), "Should have value from sharelocked file")
-	s.EqualError(s.db.Set(key, nil), timeoutErr, "Should have timeout error from Set")
+	s.Equal(s.db.Set(key, nil), context.DeadlineExceeded, "Should have timeout error from Set")
 	s.fileNotExists(path + tmpExt())
-	s.EqualError(s.db.Delete(key), timeoutErr, "Should have timeout error from Delete")
+	s.Equal(s.db.Delete(key), context.DeadlineExceeded, "Should have timeout error from Delete")
 	s.FileExists(path, "The file should still be present")
 }
 
@@ -342,7 +334,7 @@ func (s *TS) TestTempLock() {
 	}
 	defer lock.Unlock()
 
-	s.EqualError(s.db.Set(key, nil), timeoutErr, "Should have timeout error from Set")
+	s.Equal(s.db.Set(key, nil), context.DeadlineExceeded, "Should have timeout error from Set")
 	s.fileNotExists(path)
 }
 
