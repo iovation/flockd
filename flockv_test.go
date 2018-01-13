@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 )
 
@@ -45,6 +46,7 @@ func (s *TS) TestBasic() {
 	val, err := db.Get(key)
 	s.Nil(val, "Should have no value")
 	s.EqualError(err, os.ErrNotExist.Error(), "Should have ErrNotExist error")
+	s.Nil(db.Delete(key), "Should get no error deleting nonexistent key")
 
 	s.Nil(db.Set(key, []byte("hello")), "Should have no error on set")
 	val, err = db.Get(key)
@@ -67,6 +69,7 @@ func (s *TS) TestFiles() {
 	val := []byte("hello")
 	s.Nil(db.Set(key, val), "Should have no error on set")
 	s.FileExists(file, "File %q should now exist")
+	s.fileNotExists(file + tmpExt())
 	s.fileContains(file, []byte("hello"))
 
 	s.Nil(db.Delete(key), "Should have no error from Delete")
@@ -188,7 +191,9 @@ func (s *TS) TestLock() {
 	timeoutErr := cx.Err().Error()
 	s.EqualError(err, timeoutErr, "Should have timeout error from Get")
 	s.EqualError(s.db.Set(key, nil), timeoutErr, "Should have timeout error from Set")
+	s.fileNotExists(path + tmpExt())
 	s.EqualError(s.db.Delete(key), timeoutErr, "Should have timeout error from Delete")
+	s.FileExists(path, "The file should still be present")
 
 	// Now take a shared lock.
 	lock.Unlock()
@@ -204,7 +209,9 @@ func (s *TS) TestLock() {
 	s.Nil(err, "Should have no error from Get")
 	s.Equal(string(value), string(val), "Should have value from sharelocked file")
 	s.EqualError(s.db.Set(key, nil), timeoutErr, "Should have timeout error from Set")
+	s.fileNotExists(path + tmpExt())
 	s.EqualError(s.db.Delete(key), timeoutErr, "Should have timeout error from Delete")
+	s.FileExists(path, "The file should still be present")
 }
 
 func (s *TS) TestKeyPathErrors() {
@@ -243,7 +250,7 @@ func (s *TS) TestDirKeyErrors() {
 	s.DirExists(subPath, "Directory %q should still exist", dirName)
 }
 
-func (s *TS) TestPathErrors() {
+func (s *TS) TestDirErrors() {
 	db, err := New("README.md")
 	s.Nil(db, "Should have no db for non-directory")
 	s.EqualError(
@@ -286,17 +293,20 @@ func (s *TS) TestKeys() {
 		"bang":                "foo!bar",
 		"emoji":               "🤘🎉💩",
 	} {
+		path := filepath.Join(s.db.root.path, key)
 		s.Nil(
 			s.db.Set(key, []byte(key)),
 			"Should get no error setting key with %v", chars,
 		)
 		val, err := s.db.Get(key)
+		s.FileExists(path, "Should hav file with %v", chars)
 		s.Nil(err, "Should have no error getting key with %v", chars)
 		s.Equal(string(val), key, "Should have value for with with %v", chars)
 		s.Nil(
 			s.db.Delete(key),
 			"Should get no error deleting key with %v", chars,
 		)
+		s.fileNotExists(path)
 	}
 }
 
@@ -329,4 +339,8 @@ func (s *TS) fileNotExists(path string) bool {
 		fmt.Sprintf("found file %q", path),
 		"File %q should not exist", path,
 	)
+}
+
+func tmpExt() string {
+	return ".tmp" + strconv.Itoa(os.Getpid())
 }

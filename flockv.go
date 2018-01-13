@@ -13,6 +13,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -130,12 +131,13 @@ func (table *Table) Set(key string, value []byte) error {
 
 	// Create a temporary file to write to.
 	file := filepath.Join(table.path, key)
-	tmp := file + ".tmp"
+	tmp := file + ".tmp" + strconv.Itoa(os.Getpid())
 	fh, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY, 0600)
 	if err != nil {
 		return err
 	}
 	defer fh.Close()
+	defer os.Remove(tmp)
 
 	// Take an exclusive lock on the temp file.
 	lock, err := lockFile(fh, true)
@@ -160,7 +162,6 @@ func (table *Table) Set(key string, value []byte) error {
 	// Take an exclusive lock on the key file.
 	lock2, err := lockFile(fh2, true)
 	if err != nil {
-		os.Remove(tmp)
 		return err
 	}
 	defer lock2.Unlock()
