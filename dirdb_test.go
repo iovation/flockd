@@ -72,7 +72,7 @@ func (s *TS) TestFiles() {
 	s.fileNotExists(file)
 }
 
-func (s *TS) TestSubs() {
+func (s *TS) TestSub() {
 	db := s.db
 	dirName := "realm"
 	subPath := filepath.Join(db.root.dir, dirName)
@@ -93,9 +93,9 @@ func (s *TS) TestSubs() {
 	s.fileContains(file, val)
 
 	// Get should fetch the file.
-	fetched, err := sub.Get(key)
+	got, err := sub.Get(key)
 	s.Nil(err, "Should have no error from Get")
-	s.Equal(val, fetched, "Should have the value")
+	s.Equal(val, got, "Should have the value")
 
 	// Delete should delete the file.
 	s.Nil(sub.Delete(key), "Should have no error from Delete")
@@ -103,6 +103,60 @@ func (s *TS) TestSubs() {
 	val, err = sub.Get(key)
 	s.Nil(val, "Should again have no value")
 	s.EqualError(err, os.ErrNotExist.Error(), "Should have ErrNotExist error")
+}
+
+func (s *TS) TestSubs() {
+	dirs := []string{
+		"yack",
+		"this and that",
+		filepath.Join("a", "b", "c"),
+	}
+
+	// Fill out a number of subdirectories.
+	for _, subDir := range dirs {
+		subPath := filepath.Join(s.db.root.dir, subDir)
+		s.fileNotExists(subPath)
+		sub, err := s.db.Sub(subDir)
+		s.Nil(err, "Should have no error creating Sub %v", subDir)
+		s.DirExists(subPath, "Directory %q should now exist", subDir)
+		val := []byte(subDir)
+		for _, key := range []string{"strongrrl", "theory", "lily"} {
+			keyPath := filepath.Join(sub.dir, key)
+			keySub := filepath.Join(subDir, key)
+			s.fileNotExists(keyPath)
+			s.Nil(sub.Set(key, val), "Should set val in %q", keySub)
+			s.FileExists(keyPath, "File %q should now exist", keySub)
+			s.fileContains(keyPath, val)
+
+			got, err := sub.Get(key)
+			s.Nil(err, "Should have no error fetching from %q", keySub)
+			s.Equal(val, got, "Should have the value from %q", keySub)
+		}
+	}
+
+	// Make sure they haven't overwritten each other and can be deleted.
+	for _, subDir := range dirs {
+		sub, err := s.db.Sub(subDir)
+		s.Nil(err, "Should have no error creating Sub %v", subDir)
+		val := []byte(subDir)
+		for _, key := range []string{"strongrrl", "theory", "lily"} {
+			keySub := filepath.Join(subDir, key)
+			got, err := sub.Get(key)
+			s.Nil(err, "Should have no error fetching %q again", keySub)
+			s.Equal(val, got, "Should again have the value from %q", keySub)
+
+			// Delete should delete the file.
+			keyPath := filepath.Join(sub.dir, key)
+			s.Nil(sub.Delete(key), "Should have no error deleting %q", keySub)
+			s.fileNotExists(keyPath)
+			got, err = sub.Get(key)
+			s.Nil(got, "Should now have no value from %q", keySub)
+			s.EqualError(
+				err, os.ErrNotExist.Error(),
+				"Should have ErrNotExist error from %q", keySub,
+			)
+		}
+	}
 }
 
 func (s *TS) fileContains(path string, data []byte) bool {

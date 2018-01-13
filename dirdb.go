@@ -60,7 +60,6 @@ func newDir(path string) (*Dir, error) {
 	if err := os.MkdirAll(path, 0755); err != nil {
 		return nil, err
 	}
-
 	return &Dir{dir: path}, nil
 }
 
