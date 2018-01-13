@@ -37,13 +37,13 @@ func New(dir string) (*DB, error) {
 }
 
 // Sub returns a subdirectory of the DB. Keys and values can be written directly
-// to the directory. Think of directories as key spaces. Specify multiple
-// directories to create a deeper subdirectory. If the directory does not exist,
-// it will be created. Returns an error if the directory creation fails. If the
-// directory has been fetched previously, it will be returned immediately
+// to the directory. Think of directories as key spaces. Pass a path created by
+// filepath.Join to create a deeper subdirectory. If the directory does not
+// exist, it will be created. Returns an error if the directory creation fails.
+// If the directory has been fetched previously, it will be returned immediately
 // without checking for the existence of the directory on the file system.
-func (db *DB) Sub(dirs []string) (*Dir, error) {
-	path := filepath.Join(dirs...)
+func (db *DB) Sub(dir string) (*Dir, error) {
+	path := filepath.Join(db.root.dir, dir)
 	if sub, ok := db.dirs.Load(path); ok {
 		return sub.(*Dir), nil
 	}

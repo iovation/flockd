@@ -45,16 +45,12 @@ func (s *TS) TestBasic() {
 	s.Nil(val, "Should have no value")
 	s.EqualError(err, os.ErrNotExist.Error(), "Should have ErrNotExist error")
 
-	err = db.Set(key, []byte("hello"))
-	s.Nil(err, "Should have no error on set")
-
+	s.Nil(db.Set(key, []byte("hello")), "Should have no error on set")
 	val, err = db.Get(key)
 	s.Nil(err, "Should have no error from Get")
 	s.Equal([]byte("hello"), val, "Should have the value")
 
-	err = db.Delete(key)
-	s.Nil(err, "Should have no error from Delete")
-
+	s.Nil(db.Delete(key), "Should have no error from Delete")
 	val, err = db.Get(key)
 	s.Nil(val, "Should again have no value")
 	s.EqualError(err, os.ErrNotExist.Error(), "Should have ErrNotExist error")
@@ -66,11 +62,47 @@ func (s *TS) TestFiles() {
 	file := filepath.Join(db.root.dir, key)
 	s.fileNotExists(file)
 
-	err := db.Set(key, []byte("hello"))
-	s.Nil(err, "Should have no error on set")
-
+	// Set should create a file.
+	val := []byte("hello")
+	s.Nil(db.Set(key, val), "Should have no error on set")
 	s.FileExists(file, "File %q should now exist")
 	s.fileContains(file, []byte("hello"))
+
+	s.Nil(db.Delete(key), "Should have no error from Delete")
+	s.fileNotExists(file)
+}
+
+func (s *TS) TestSubs() {
+	db := s.db
+	dirName := "realm"
+	subPath := filepath.Join(db.root.dir, dirName)
+	s.fileNotExists(subPath)
+
+	sub, err := s.db.Sub(dirName)
+	s.Nil(err, "Should have no error from Sub")
+	s.DirExists(subPath, "Directory %q should now exist", dirName)
+
+	key := "xoxoxoxoxoxo"
+	file := filepath.Join(subPath, key)
+	s.fileNotExists(file)
+
+	// Set should create a file.
+	val := []byte("hello")
+	s.Nil(sub.Set(key, val), "Should have no error on set")
+	s.FileExists(file, "File %q should now exist")
+	s.fileContains(file, val)
+
+	// Get should fetch the file.
+	fetched, err := sub.Get(key)
+	s.Nil(err, "Should have no error from Get")
+	s.Equal(val, fetched, "Should have the value")
+
+	// Delete should delete the file.
+	s.Nil(sub.Delete(key), "Should have no error from Delete")
+	s.fileNotExists(file)
+	val, err = sub.Get(key)
+	s.Nil(val, "Should again have no value")
+	s.EqualError(err, os.ErrNotExist.Error(), "Should have ErrNotExist error")
 }
 
 func (s *TS) fileContains(path string, data []byte) bool {
