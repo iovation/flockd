@@ -1,6 +1,7 @@
 package dirdb
 
 import (
+	"context"
 	"fmt"
 	"github.com/stretchr/testify/suite"
 	"io/ioutil"
@@ -162,6 +163,81 @@ func (s *TS) TestSubs() {
 			)
 		}
 	}
+}
+
+func (s *TS) TestGetLock() {
+	key := "whatever"
+	value := []byte("🤘🎉💩")
+	path := filepath.Join(s.db.root.dir, key)
+
+	s.Nil(s.db.Set(key, value), "Set %v", key)
+
+	// Take an exclusive lock on the file.
+	fh, err := os.Open(path)
+	if err != nil {
+		s.T().Fatal("open", err)
+	}
+	lock, err := lockFile(fh, true)
+	if err != nil {
+		s.T().Fatal("lockFile", err)
+	}
+
+	val, err := s.db.Get(key)
+	s.Nil(val, "Should have no value from locked file")
+	cx, cancel := context.WithTimeout(context.Background(), 0)
+	cancel()
+	timeoutErr := cx.Err().Error()
+	s.EqualError(err, timeoutErr, "Should have timeout error from Get")
+
+	// Now take a shared lock.
+	lock.Unlock()
+	fh, err = os.Open(path)
+	if err != nil {
+		s.T().Fatal("open", err)
+	}
+	lock, err = lockFile(fh, false)
+	if err != nil {
+		s.T().Fatal("lockFile", err)
+	}
+	val, err = s.db.Get(key)
+	s.Nil(err, "Should have no error from Get")
+	s.Equal(string(value), string(val), "Should have value from sharelocked file")
+}
+
+func (s *TS) TestKeyErrors() {
+	badKey := filepath.Join("foo", "bar")
+	val, err := s.db.Get(badKey)
+	s.Nil(val, "Should have no value from Get for bad key")
+	s.Equal(
+		err, os.ErrInvalid,
+		"Should have os.ErrInvalid from Get for bad key",
+	)
+	s.Equal(
+		s.db.Set(badKey, nil), os.ErrInvalid,
+		"Should have os.ErrInvalid from Set for bad key",
+	)
+	s.Equal(
+		s.db.Delete(badKey), os.ErrInvalid,
+		"Should have os.ErrInvalid from Delete for bad key",
+	)
+}
+
+func (s *TS) TestDirKeyErrors() {
+	// A directory should not work as a key.
+	dirName := "aDirectory"
+	subPath := filepath.Join(s.db.root.dir, dirName)
+	_, err := s.db.Sub(dirName)
+	s.Nil(err, "Should have no error from Sub")
+	s.DirExists(subPath, "Directory %q should now exist", dirName)
+
+	val, err := s.db.Get(dirName)
+	s.Nil(val, "Should have no value from Get for directory")
+	s.NotNil(err, "Should have an error from Get for directory")
+	s.DirExists(subPath, "Directory %q should still exist", dirName)
+	s.NotNil(s.db.Set(dirName, nil), "Should have an error from Set for directory")
+	s.DirExists(subPath, "Directory %q should still exist", dirName)
+	s.NotNil(s.db.Delete(dirName), "Should have an error from Delete for directory")
+	s.DirExists(subPath, "Directory %q should still exist", dirName)
 }
 
 func (s *TS) TestPathErrors() {

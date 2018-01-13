@@ -188,6 +188,11 @@ func (dir *Dir) Delete(key string) error {
 	}
 	defer fh.Close()
 
+	// Make sure it's not a directory.
+	if info, err := fh.Stat(); err == nil && info.IsDir() {
+		return os.ErrInvalid
+	}
+
 	// Take an exclusive lock.
 	lock, err := lockFile(fh, true)
 	if err != nil {
