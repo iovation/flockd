@@ -79,10 +79,10 @@ func (s *TS) TestFiles() {
 func (s *TS) TestTable() {
 	db := s.db
 	dirName := "realm"
-	subPath := filepath.Join(db.root.path, dirName+"-tab")
+	subPath := filepath.Join(db.root.path, dirName+".tbl")
 	s.fileNotExists(subPath)
 
-	tab, err := s.db.Table(dirName)
+	tbl, err := s.db.Table(dirName)
 	s.Nil(err, "Should have no error from Table")
 	s.DirExists(subPath, "Directory %q should now exist", dirName)
 
@@ -92,19 +92,19 @@ func (s *TS) TestTable() {
 
 	// Set should create a file.
 	val := []byte("hello")
-	s.Nil(tab.Set(key, val), "Should have no error on set")
+	s.Nil(tbl.Set(key, val), "Should have no error on set")
 	s.FileExists(file, "File %q should now exist")
 	s.fileContains(file, val)
 
 	// Get should fetch the file.
-	got, err := tab.Get(key)
+	got, err := tbl.Get(key)
 	s.Nil(err, "Should have no error from Get")
 	s.Equal(val, got, "Should have the value")
 
 	// Delete should delete the file.
-	s.Nil(tab.Delete(key), "Should have no error from Delete")
+	s.Nil(tbl.Delete(key), "Should have no error from Delete")
 	s.fileNotExists(file)
-	val, err = tab.Get(key)
+	val, err = tbl.Get(key)
 	s.Nil(val, "Should again have no value")
 	s.EqualError(err, os.ErrNotExist.Error(), "Should have ErrNotExist error")
 }
@@ -118,26 +118,26 @@ func (s *TS) TestTables() {
 
 	// Fill out a number of subdirectories.
 	for _, subDir := range tables {
-		subPath := filepath.Join(s.db.root.path, subDir+"-tab")
+		subPath := filepath.Join(s.db.root.path, subDir+".tbl")
 		s.fileNotExists(subPath)
-		tab, err := s.db.Table(subDir)
+		tbl, err := s.db.Table(subDir)
 		s.Nil(err, "Should have no error creating Table %v", subDir)
 		s.DirExists(subPath, "Directory %q should now exist", subDir)
 
 		mapped, ok := s.db.tables.Load(subDir)
 		s.True(ok, "Should have loaded Table %v", subDir)
-		s.Equal(tab, mapped, "Should have retained %q", subDir)
+		s.Equal(tbl, mapped, "Should have retained %q", subDir)
 
 		val := []byte(subDir)
 		for _, key := range []string{"strongrrl", "theory", "lily"} {
-			keyPath := filepath.Join(tab.path, key+".kv")
+			keyPath := filepath.Join(tbl.path, key+".kv")
 			keyTable := filepath.Join(subDir, key+".kv")
 			s.fileNotExists(keyPath)
-			s.Nil(tab.Set(key, val), "Should set val in %q", keyTable)
+			s.Nil(tbl.Set(key, val), "Should set val in %q", keyTable)
 			s.FileExists(keyPath, "File %q should now exist", keyTable)
 			s.fileContains(keyPath, val)
 
-			got, err := tab.Get(key)
+			got, err := tbl.Get(key)
 			s.Nil(err, "Should have no error fetching from %q", keyTable)
 			s.Equal(val, got, "Should have the value from %q", keyTable)
 		}
@@ -145,20 +145,20 @@ func (s *TS) TestTables() {
 
 	// Make sure they haven't overwritten each other and can be deleted.
 	for _, subDir := range tables {
-		tab, err := s.db.Table(subDir)
+		tbl, err := s.db.Table(subDir)
 		s.Nil(err, "Should have no error creating Table %v", subDir)
 		val := []byte(subDir)
 		for _, key := range []string{"strongrrl", "theory", "lily"} {
 			keyTable := filepath.Join(subDir, key+".kv")
-			got, err := tab.Get(key)
+			got, err := tbl.Get(key)
 			s.Nil(err, "Should have no error fetching %q again", keyTable)
 			s.Equal(val, got, "Should again have the value from %q", keyTable)
 
 			// Delete should delete the file.
-			keyPath := filepath.Join(tab.path, key+".kv")
-			s.Nil(tab.Delete(key), "Should have no error deleting %q", keyTable)
+			keyPath := filepath.Join(tbl.path, key+".kv")
+			s.Nil(tbl.Delete(key), "Should have no error deleting %q", keyTable)
 			s.fileNotExists(keyPath)
-			got, err = tab.Get(key)
+			got, err = tbl.Get(key)
 			s.Nil(got, "Should now have no value from %q", keyTable)
 			s.EqualError(
 				err, os.ErrNotExist.Error(),
@@ -265,12 +265,12 @@ func (s *TS) TestDirErrors() {
 		"Should have error for non-directory",
 	)
 
-	file := filepath.Join(s.db.root.path, "foo-tab")
+	file := filepath.Join(s.db.root.path, "foo.tbl")
 	if _, err := os.Create(file); err != nil {
 		s.T().Fatal("os.Create", err)
 	}
-	tab, err := s.db.Table("foo")
-	s.Nil(tab, "Should have no tab for non-directory")
+	tbl, err := s.db.Table("foo")
+	s.Nil(tbl, "Should have no tbl for non-directory")
 	s.EqualError(
 		err,
 		fmt.Sprintf("mkdir %v: not a directory", file),

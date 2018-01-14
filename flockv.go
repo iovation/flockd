@@ -54,7 +54,7 @@ func (db *DB) Table(subdir string) (*Table, error) {
 		return table.(*Table), nil
 	}
 
-	table, err := newTable(filepath.Join(db.root.path, subdir+"-tab"))
+	table, err := newTable(filepath.Join(db.root.path, subdir+".tbl"))
 	if err != nil {
 		return nil, err
 	}
