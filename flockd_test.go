@@ -1,4 +1,4 @@
-package flockv
+package flockd
 
 import (
 	"context"
