@@ -2,8 +2,9 @@ flockd 0.1.0
 ============
 
 flockd provides a simple file system-based key/value database that uses file
-locking for concurrency safety. Keys correpond to files, values to their
-contents, and tables to directories.
+locking for concurrency safety. Keys correspond to files, values to their
+contents, and tables to directories. Files are share-locked on read (Get) and
+exclusive-locked on write (Set and Delete).
 
 Inspirations
 ------------
