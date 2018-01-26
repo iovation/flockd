@@ -30,8 +30,13 @@ func makeDB(b *testing.B) *DB {
 	return db
 }
 
-func fillDB(b *testing.B, db *DB, tableCount, keyCount int) map[string][]string {
-	tables := make(map[string][]string, tableCount)
+type tableSpec struct {
+	name string
+	keys []string
+}
+
+func fillDB(b *testing.B, db *DB, tableCount, keyCount int) []*tableSpec {
+	tables := make([]*tableSpec, tableCount)
 	for tc := 0; tc < tableCount; tc++ {
 		tblName := stringOf(random(3, 10))
 		tbl, _ := db.Table(tblName)
@@ -45,7 +50,7 @@ func fillDB(b *testing.B, db *DB, tableCount, keyCount int) map[string][]string 
 			}
 			keys[kc] = key
 		}
-		tables[tblName] = keys
+		tables[tc] = &tableSpec{tblName, keys}
 	}
 	return tables
 }
@@ -79,10 +84,9 @@ func benchmarkReads(b *testing.B, workerCount, tableCount, keyCount int) {
 		go func(n int) {
 			currentResult := []byte{}
 			for i := 0; i < n; i++ {
-				for tblName, keys := range tables {
-					tbl, _ := db.Table(tblName)
-					currentResult, _ = tbl.Get(keys[rand.Intn(len(keys))])
-				}
+				spec := tables[rand.Intn(len(tables))]
+				tbl, _ := db.Table(spec.name)
+				currentResult, _ = tbl.Get(spec.keys[rand.Intn(len(spec.keys))])
 			}
 			globalResultChan <- currentResult
 			wg.Done()
@@ -93,14 +97,18 @@ func benchmarkReads(b *testing.B, workerCount, tableCount, keyCount int) {
 }
 
 func BenchmarkReads(b *testing.B) {
-	for desc, spec := range map[string][]int{
-		"small":  {1, 10},
-		"medium": {3, 100},
-		// "large":  {30, 1000},
+	for _, spec := range []struct {
+		size     string
+		tblCount int
+		keyCount int
+	}{
+		{"small", 1, 10},
+		{"medium", 3, 100},
+		{"large", 10, 500},
 	} {
 		for _, wc := range []int{1, 2, 4, 8, 16, 32, 64} {
-			b.Run(fmt.Sprintf("%v_reads-%v", desc, wc), func(b *testing.B) {
-				benchmarkReads(b, wc, spec[0], spec[1])
+			b.Run(fmt.Sprintf("%v_reads-%v", spec.size, wc), func(b *testing.B) {
+				benchmarkReads(b, wc, spec.tblCount, spec.keyCount)
 			})
 		}
 	}
