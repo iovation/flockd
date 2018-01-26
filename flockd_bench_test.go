@@ -156,6 +156,8 @@ func benchmarkMix(b *testing.B, readerCount, writerCount, tableCount, keyCount i
 				if err := tbl.Set(key, val); err != nil {
 					b.Logf("Error writing: %v", err)
 				}
+				// XXX flockd_bench_test.go:157: Error writing: rename /var/folders/yv/h0_940zx2j38gfnkrt3xcc5c0000gn/T/bench250886901/abc.tbl/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWX.kv.tmp13309 /var/folders/yv/h0_940zx2j38gfnkrt3xcc5c0000gn/T/bench250886901/abc.tbl/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWX.kv: no such file or directory
+
 			}
 			wg.Done()
 		}(b.N)
@@ -183,6 +185,10 @@ func BenchmarkMix(b *testing.B) {
 			{7, 64},
 			{1, 10},
 			{1, 50},
+			{0, 1},
+			{0, 5},
+			{0, 10},
+			{0, 50},
 		} {
 			b.Run(fmt.Sprintf("%v_reads-%v/%v", spec.size, split[0], split[1]), func(b *testing.B) {
 				benchmarkMix(b, split[1], split[0], spec.tblCount, spec.keyCount)
