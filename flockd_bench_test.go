@@ -137,7 +137,7 @@ func benchmarkMix(b *testing.B, readerCount, writerCount, tableCount, keyCount i
 				key := spec.keys[rand.Intn(len(spec.keys))]
 				currentResult, err = tbl.Get(key)
 				if err != nil {
-					b.Logf("Error reading %v/%v: %v", tblName, key, err)
+					b.Logf("Error reading: %v", err)
 				}
 			}
 			globalResultChan <- currentResult
@@ -152,7 +152,10 @@ func benchmarkMix(b *testing.B, readerCount, writerCount, tableCount, keyCount i
 				tbl, _ := db.Table(spec.name)
 				val := make([]byte, random(64, 4096))
 				rand.Read(val)
-				tbl.Set(spec.keys[rand.Intn(len(spec.keys))], val)
+				key := spec.keys[rand.Intn(len(spec.keys))]
+				if err := tbl.Set(key, val); err != nil {
+					b.Logf("Error writing: %v", err)
+				}
 			}
 			wg.Done()
 		}(b.N)
@@ -170,9 +173,19 @@ func BenchmarkMix(b *testing.B) {
 		{"tiny", 1, 2},
 		{"small", 1, 10},
 	} {
-		for rc, wc := range []int{1, 2, 4, 8, 16, 32, 64} {
-			b.Run(fmt.Sprintf("%v_reads-%v/%v", spec.size, rc+1, wc), func(b *testing.B) {
-				benchmarkMix(b, rc+1, wc, spec.tblCount, spec.keyCount)
+		for _, split := range [][]int{
+			{1, 1},
+			{2, 2},
+			{3, 4},
+			{4, 8},
+			{5, 16},
+			{6, 32},
+			{7, 64},
+			{1, 10},
+			{1, 50},
+		} {
+			b.Run(fmt.Sprintf("%v_reads-%v/%v", spec.size, split[0], split[1]), func(b *testing.B) {
+				benchmarkMix(b, split[1], split[0], spec.tblCount, spec.keyCount)
 			})
 		}
 	}
