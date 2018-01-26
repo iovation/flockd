@@ -92,10 +92,16 @@ func benchmarkReads(b *testing.B, workerCount, tableCount, keyCount int) {
 	wg.Wait()
 }
 
-func BenchmarkSmallReads(b *testing.B) {
-	for _, wc := range []int{1, 2, 4, 8, 16, 32, 64} {
-		b.Run(fmt.Sprintf("small_reads-%v", wc), func(b *testing.B) {
-			benchmarkReads(b, wc, 1, 10)
-		})
+func BenchmarkReads(b *testing.B) {
+	for desc, spec := range map[string][]int{
+		"small":  {1, 10},
+		"medium": {3, 100},
+		// "large":  {30, 1000},
+	} {
+		for _, wc := range []int{1, 2, 4, 8, 16, 32, 64} {
+			b.Run(fmt.Sprintf("%v_reads-%v", desc, wc), func(b *testing.B) {
+				benchmarkReads(b, wc, spec[0], spec[1])
+			})
+		}
 	}
 }
