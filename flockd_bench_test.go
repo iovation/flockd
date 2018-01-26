@@ -165,8 +165,8 @@ func BenchmarkMix(b *testing.B) {
 		{"small", 1, 10},
 	} {
 		for rc, wc := range []int{1, 2, 4, 8, 16, 32, 64} {
-			b.Run(fmt.Sprintf("%v_reads-%v/%v", spec.size, rc, wc), func(b *testing.B) {
-				benchmarkMix(b, rc, wc, spec.tblCount, spec.keyCount)
+			b.Run(fmt.Sprintf("%v_reads-%v/%v", spec.size, rc+1, wc), func(b *testing.B) {
+				benchmarkMix(b, rc+1, wc, spec.tblCount, spec.keyCount)
 			})
 		}
 	}
