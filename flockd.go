@@ -10,7 +10,7 @@ package flockd
 
 import (
 	"context"
-	"github.com/theory/go-flock"
+	"github.com/theckman/go-flock"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -113,7 +113,7 @@ func (table *Table) Get(key string) ([]byte, error) {
 	defer fh.Close()
 
 	// Take a shared lock.
-	lock, err := lockFile(fh, false)
+	lock, err := lockFile(file, false)
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +158,7 @@ func (table *Table) Set(key string, value []byte) error {
 	defer os.Remove(tmp)
 
 	// Take an exclusive lock on the temp file.
-	lock, err := lockFile(fh, true)
+	lock, err := lockFile(tmp, true)
 	if err != nil {
 		return err
 	}
@@ -178,7 +178,7 @@ func (table *Table) Set(key string, value []byte) error {
 	defer fh2.Close()
 
 	// Take an exclusive lock on the key file.
-	lock2, err := lockFile(fh2, true)
+	lock2, err := lockFile(file, true)
 	if err != nil {
 		return err
 	}
@@ -220,7 +220,7 @@ func (table *Table) Delete(key string) error {
 	}
 
 	// Take an exclusive lock.
-	lock, err := lockFile(fh, true)
+	lock, err := lockFile(file, true)
 	if err != nil {
 		return err
 	}
@@ -232,8 +232,8 @@ func (table *Table) Delete(key string) error {
 
 // lockFile tries to acquire a shared or exclusive lock on a file, waiting up to
 // a millisecond for the lock, and returns the lock or an error.
-func lockFile(fh *os.File, exclusive bool) (*flock.Flock, error) {
-	flock := flock.New(fh)
+func lockFile(path string, exclusive bool) (*flock.Flock, error) {
+	flock := flock.NewFlock(path)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
 	defer cancel()
 	try := flock.TryRLockContext

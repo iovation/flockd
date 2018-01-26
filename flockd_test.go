@@ -175,11 +175,7 @@ func (s *TS) TestLock() {
 	s.Nil(s.db.Set(key, value), "Set %v", key)
 
 	// Take an exclusive lock on the file.
-	fh, err := os.Open(path)
-	if err != nil {
-		s.T().Fatal("open", err)
-	}
-	lock, err := lockFile(fh, true)
+	lock, err := lockFile(path, true)
 	if err != nil {
 		s.T().Fatal("lockFile", err)
 	}
@@ -194,11 +190,7 @@ func (s *TS) TestLock() {
 
 	// Now take a shared lock.
 	lock.Unlock()
-	fh, err = os.Open(path)
-	if err != nil {
-		s.T().Fatal("open", err)
-	}
-	lock, err = lockFile(fh, false)
+	lock, err = lockFile(path, false)
 	if err != nil {
 		s.T().Fatal("lockFile", err)
 	}
@@ -326,11 +318,7 @@ func (s *TS) TestTempLock() {
 	tmp := path + tmpExt()
 
 	// Take an exclusive lock on the temp file.
-	fh, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY, 0600)
-	if err != nil {
-		s.T().Fatal("open", err)
-	}
-	lock, err := lockFile(fh, true)
+	lock, err := lockFile(tmp, true)
 	if err != nil {
 		s.T().Fatal("lockFile", err)
 	}
