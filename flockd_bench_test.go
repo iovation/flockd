@@ -128,11 +128,17 @@ func benchmarkMix(b *testing.B, readerCount, writerCount, tableCount, keyCount i
 
 	for rc := 0; rc < readerCount; rc++ {
 		go func(n int) {
+			var err error
 			currentResult := []byte{}
 			for i := 0; i < n; i++ {
-				spec := tables[rand.Intn(len(tables))]
+				tblName := rand.Intn(len(tables))
+				spec := tables[tblName]
 				tbl, _ := db.Table(spec.name)
-				currentResult, _ = tbl.Get(spec.keys[rand.Intn(len(spec.keys))])
+				key := spec.keys[rand.Intn(len(spec.keys))]
+				currentResult, err = tbl.Get(key)
+				if err != nil {
+					b.Logf("Error reading %v/%v: %v", tblName, key, err)
+				}
 			}
 			globalResultChan <- currentResult
 			wg.Done()
