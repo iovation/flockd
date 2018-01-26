@@ -113,3 +113,61 @@ func BenchmarkReads(b *testing.B) {
 		}
 	}
 }
+
+func benchmarkMix(b *testing.B, readerCount, writerCount, tableCount, keyCount int) {
+	db := makeDB(b)
+	defer os.RemoveAll(db.root.path)
+	tables := fillDB(b, db, tableCount, keyCount)
+
+	// Holds our final results, to prevent compiler optimizations.
+	globalResultChan = make(chan []byte, readerCount)
+
+	var wg sync.WaitGroup
+	wg.Add(readerCount + writerCount)
+	b.ResetTimer()
+
+	for rc := 0; rc < readerCount; rc++ {
+		go func(n int) {
+			currentResult := []byte{}
+			for i := 0; i < n; i++ {
+				spec := tables[rand.Intn(len(tables))]
+				tbl, _ := db.Table(spec.name)
+				currentResult, _ = tbl.Get(spec.keys[rand.Intn(len(spec.keys))])
+			}
+			globalResultChan <- currentResult
+			wg.Done()
+		}(b.N)
+	}
+
+	for wc := 0; wc < writerCount; wc++ {
+		go func(n int) {
+			for i := 0; i < n; i++ {
+				spec := tables[rand.Intn(len(tables))]
+				tbl, _ := db.Table(spec.name)
+				val := make([]byte, random(64, 4096))
+				rand.Read(val)
+				tbl.Set(spec.keys[rand.Intn(len(spec.keys))], val)
+			}
+			wg.Done()
+		}(b.N)
+	}
+
+	wg.Wait()
+}
+
+func BenchmarkMix(b *testing.B) {
+	for _, spec := range []struct {
+		size     string
+		tblCount int
+		keyCount int
+	}{
+		{"tiny", 1, 2},
+		{"small", 1, 10},
+	} {
+		for rc, wc := range []int{1, 2, 4, 8, 16, 32, 64} {
+			b.Run(fmt.Sprintf("%v_reads-%v/%v", spec.size, rc, wc), func(b *testing.B) {
+				benchmarkMix(b, rc, wc, spec.tblCount, spec.keyCount)
+			})
+		}
+	}
+}
