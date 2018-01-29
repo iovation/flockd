@@ -5,6 +5,13 @@ file locking for concurrency safety. Keys correpond to files, values to their
 contents, and tables to directories. Files are share-locked on read (Get) and
 exclusive-locked on write (Set and Delete).
 
+This may be overkill.
+
+In any event, your file system must support proper file locking for this to
+work. If your file system does not, it might still work if file renaming and
+unlinking is atomic. If not, then all bets are off, and you can expect
+occaisional bad reads.
+
 */
 package flockd
 
@@ -36,8 +43,8 @@ type Table struct {
 // New creates a new key/value database, with the specified directory as the
 // root table. If the directory does not exist, it will be created. The timeout
 // sets the maximum time flockd will wait for a file lock when attempting to
-// read or write a record, in nanoseconds. Returns an error if the directory
-// creation fails or if the timeout is less than or equal to zero.
+// read, write, or delete a file, in nanoseconds. Returns an error if the
+// directory creation fails or if the timeout is less than or equal to zero.
 func New(dir string, timeout time.Duration) (*DB, error) {
 	if timeout <= 0 {
 		return nil, errors.New("Invalid lock timeout")
@@ -93,7 +100,7 @@ func (db *DB) Set(key string, val []byte) error {
 }
 
 // Delete deletes the key and its value by deleting the file named for the key,
-// plus the extension ".kv", // in the root directory.
+// plus the extension ".kv", in the root directory.
 func (db *DB) Delete(key string) error {
 	return db.root.Delete(key)
 }
@@ -103,9 +110,9 @@ func (db *DB) Delete(key string) error {
 // separator character; if it does, os.ErrInvalid will be returned. If the file
 // does not exist, os.ErrNotExist will be returned. For concurrency safetey, Get
 // acquires a shared file system lock on the file before reading its contents.
-// If the file has an exclusive lock on it, Get will spend up to a millisecond
-// waiting for the shared lock before returning a context.DeadlineExceeded
-// error.
+// If the file has an exclusive lock on it, Get will wait up to the timeout set
+// for the database for the shared lock before returning a
+// context.DeadlineExceeded error.
 func (table *Table) Get(key string) ([]byte, error) {
 	// Make sure there is no directory separator.
 	if strings.ContainsRune(key, os.PathSeparator) {
@@ -144,9 +151,9 @@ func (table *Table) Get(key string) ([]byte, error) {
 //
 // To set the value, Set first creates a temporary file in the table directory
 // and tries to acquire an exclusive lock. If the temporary file already has
-// exclusive lock, Set will wait up to a millisecond to acquire the lock before
-// returning a context.DeadlineExceeded error. Once it has the lock, it writes
-// the value to the temporary file.
+// exclusive lock, Set will wait up to the timeout set for the database to
+// acquire the lock before returning a context.DeadlineExceeded error. Once it
+// has the lock, it writes the value to the temporary file.
 //
 // Next, it tries to acquire an exclusive lock on the file with the key name,
 // again waiting up to a millisecond before returning a context.DeadlineExceeded
@@ -193,12 +200,12 @@ func (table *Table) Set(key string, value []byte) error {
 }
 
 // Delete deletes the key and its value by deleting the file named for key, plus
-// the extension ".kv", in the table directory. The key must not contain a path
-// separator character; if it does, os.ErrInvalid will be returned. Before
+// the extension ".kv", from the table directory. The key must not contain a
+// path separator character; if it does, os.ErrInvalid will be returned. Before
 // deleting the file, Delete tries to acquire an exclusive lock. If the file
-// already has exclusive lock, Delete will wait up to a millisecond to acquire
-// the lock before returning a context.DeadlineExceeded error. Once it has
-// acquired the lock, it deletes the file.
+// already has exclusive lock, Delete will wait up to the timeout set for the
+// database to acquire the lock before returning a context.DeadlineExceeded
+// error. Once it has acquired the lock, it deletes the file.
 func (table *Table) Delete(key string) error {
 	// Make sure there is no directory separator.
 	if strings.ContainsRune(key, os.PathSeparator) {
