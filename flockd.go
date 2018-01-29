@@ -98,6 +98,13 @@ func (db *DB) Get(key string) ([]byte, error) {
 	return db.root.Get(key)
 }
 
+// Add adds the key/value pair by writing it to the file named for the key, plus
+// the extension ".kv", in the root directory, but only if the file does not
+// already exist.
+func (db *DB) Add(key string, val []byte) error {
+	return db.root.Add(key, val)
+}
+
 // Set sets the value for the key by writing it to the file named for the key,
 // plus the extension ".kv", in the root directory.
 func (db *DB) Set(key string, val []byte) error {
@@ -171,6 +178,9 @@ func (table *Table) Set(key string, value []byte) error {
 
 	// Create a temporary file to write to.
 	fh, err := ioutil.TempFile(table.path, key+".kv")
+	if err != nil {
+		return err
+	}
 	defer fh.Close()
 	tmp := fh.Name()
 	defer os.Remove(tmp)
@@ -199,6 +209,81 @@ func (table *Table) Set(key string, value []byte) error {
 		return err
 	}
 	defer lock2.Unlock()
+
+	// Move the file.
+	return os.Rename(tmp, file)
+}
+
+// add adds the key/value pair by writing it to the file named for key, plus the
+// extension ".kv", in the table directory, but only if the file does not
+// already exist. The key must not contain a path separator character; if it
+// does, os.ErrInvalid will be returned. Returns os.ErrExist if the file already
+// exists.
+//
+// To add the value, Add first opens the file with the key name, but only if it
+// doesn't already exist. It then tries to acquire an exclusive lock on the
+// file. It tries only once, and doesn't wait for a lock, so that if any other
+// process first got a lock, the file would be considered to already exist.
+
+// Add then creates a temporary file in the table directory and tries to acquire
+// an exclusive lock. If the temporary file already has exclusive lock, Add will
+// wait up to the timeout set for the database to acquire the lock before
+// returning a context.DeadlineExceeded error. Once it has the lock, it writes
+// the value to the temporary file, then moves the temporary file to the new
+// file.
+func (table *Table) Add(key string, value []byte) error {
+	// Make sure there is no directory separator.
+	if strings.ContainsRune(key, os.PathSeparator) {
+		return os.ErrInvalid
+	}
+
+	// Open the destination file, but only if it doesn't already exist.
+	file := filepath.Join(table.path, key+".kv")
+	fh, err := os.OpenFile(file, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0600)
+	if err != nil {
+		if os.IsExist(err) {
+			return os.ErrExist
+		}
+		return err
+	}
+	defer fh.Close()
+
+	// Take an exclusive lock on the file, but don't wait for it. Yes, there is
+	// a race condition here.
+	lock := flock.NewFlock(file)
+	locked, err := lock.TryLock()
+	if err != nil {
+		return err
+	}
+	if !locked {
+		// Someone beat us to it?
+		return os.ErrExist
+	}
+	defer lock.Unlock()
+
+	// Create a temporary file to write to.
+	tf, err := ioutil.TempFile(table.path, key+".kv")
+	if err != nil {
+		return err
+	}
+	defer tf.Close()
+	tmp := tf.Name()
+	defer os.Remove(tmp)
+
+	// Take an exclusive lock on the temp file.
+	lock2, err := lockFile(tmp, true, table.timeout)
+	if err != nil {
+		return err
+	}
+	defer lock2.Unlock()
+
+	// Write to the temp file.
+	if _, err := tf.Write(value); err != nil {
+		return err
+	}
+	if err := tf.Sync(); err != nil {
+		return err
+	}
 
 	// Move the file.
 	return os.Rename(tmp, file)

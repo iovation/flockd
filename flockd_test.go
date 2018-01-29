@@ -54,10 +54,15 @@ func (s *TS) TestBasic() {
 	s.EqualError(err, os.ErrNotExist.Error(), "Should have ErrNotExist error")
 	s.Nil(db.Delete(key), "Should get no error deleting nonexistent key")
 
-	s.Nil(db.Set(key, []byte("hello")), "Should have no error on set")
+	s.Nil(db.Add(key, []byte("hello")), "Should have no error on add")
 	val, err = db.Get(key)
 	s.Nil(err, "Should have no error from Get")
-	s.Equal([]byte("hello"), val, "Should have the value")
+	s.Equal([]byte("hello"), val, "Should have the added value")
+
+	s.Nil(db.Set(key, []byte("goodbye")), "Should have no error on set")
+	val, err = db.Get(key)
+	s.Nil(err, "Should have no error from Get")
+	s.Equal([]byte("goodbye"), val, "Should have the set value")
 
 	s.Nil(db.Delete(key), "Should have no error from Delete")
 	val, err = db.Get(key)
@@ -91,6 +96,17 @@ func (s *TS) TestFiles() {
 
 	s.Nil(db.Delete(key), "Should have no error from Delete")
 	s.fileNotExists(file)
+
+	// Add should also create a file.
+	s.Nil(db.Add(key, val), "Should have no error on add")
+	s.FileExists(file, "File %q should now exist")
+	s.fileNotExists(file + tmpExt())
+	s.fileContains(file, []byte("hello"))
+
+	// But it should fail if the file already exists.
+	s.Equal(db.Add(key, nil), os.ErrExist, "Add should fail for existing file")
+	s.Nil(db.Delete(key), "Should have no error from Delete")
+	s.fileNotExists(file)
 }
 
 func (s *TS) TestTable() {
@@ -122,9 +138,22 @@ func (s *TS) TestTable() {
 	// Delete should delete the file.
 	s.Nil(tbl.Delete(key), "Should have no error from Delete")
 	s.fileNotExists(file)
-	val, err = tbl.Get(key)
-	s.Nil(val, "Should again have no value")
+	got, err = tbl.Get(key)
+	s.Nil(got, "Should again have no value")
 	s.EqualError(err, os.ErrNotExist.Error(), "Should have ErrNotExist error")
+
+	// Add should also create a file.
+	s.Nil(tbl.Add(key, val), "Should have no error on add")
+	s.FileExists(file, "File %q should exist again")
+	s.fileContains(file, val)
+
+	// Get should fetch the file.
+	got, err = tbl.Get(key)
+	s.Nil(err, "Should have no error from Get")
+	s.Equal(val, got, "Should have the value again")
+
+	// But it should fail if the file already exists.
+	s.Equal(tbl.Add(key, nil), os.ErrExist, "Add should fail for existing file")
 }
 
 func (s *TS) TestTables() {
@@ -203,6 +232,7 @@ func (s *TS) TestLock() {
 		s.T().Fatal("lockFile", err)
 	}
 
+	s.Equal(s.db.Add(key, nil), os.ErrExist, "Should have os.ErrExist error from Add")
 	val, err := s.db.Get(key)
 	s.Nil(val, "Should have no value from locked file")
 	s.Equal(err, context.DeadlineExceeded, "Should have timeout error from Get")
@@ -235,6 +265,10 @@ func (s *TS) TestKeyPathErrors() {
 		"Should have os.ErrInvalid from Get for bad key",
 	)
 	s.Equal(
+		s.db.Add(badKey, nil), os.ErrInvalid,
+		"Should have os.ErrInvalid from Add for bad key",
+	)
+	s.Equal(
 		s.db.Set(badKey, nil), os.ErrInvalid,
 		"Should have os.ErrInvalid from Set for bad key",
 	)
@@ -256,6 +290,7 @@ func (s *TS) TestDirKeyErrors() {
 	s.Nil(val, "Should have no value from Get for directory")
 	s.NotNil(err, "Should have an error from Get for directory")
 	s.DirExists(dir, "Directory %q should still exist", dirName)
+	s.NotNil(s.db.Add(dirName, nil), "Should have an error from Add for directory")
 	s.NotNil(s.db.Set(dirName, nil), "Should have an error from Set for directory")
 	s.DirExists(dir, "Directory %q should still exist", dirName)
 	s.NotNil(s.db.Delete(dirName), "Should have an error from Delete for directory")
@@ -309,14 +344,26 @@ func (s *TS) TestKeys() {
 		"emoji":               "🤘🎉💩",
 	} {
 		path := filepath.Join(s.db.root.path, key+".kv")
+		// Make sure Add and Get work.
 		s.Nil(
-			s.db.Set(key, []byte(key)),
+			s.db.Add(key, []byte("Add:"+key)),
+			"Should get no error adding key with %v", chars,
+		)
+		s.FileExists(path, "Should have file with %v", chars)
+		val, err := s.db.Get(key)
+		s.Nil(err, "Should have no error getting key with %v", chars)
+		s.Equal(string(val), "Add:"+key, "Should have value for with with %v", chars)
+
+		// Make sure Set and Get work.
+		s.Nil(
+			s.db.Set(key, []byte("Set:"+key)),
 			"Should get no error setting key with %v", chars,
 		)
-		val, err := s.db.Get(key)
-		s.FileExists(path, "Should hav file with %v", chars)
+		val, err = s.db.Get(key)
 		s.Nil(err, "Should have no error getting key with %v", chars)
-		s.Equal(string(val), key, "Should have value for with with %v", chars)
+		s.Equal(string(val), "Set:"+key, "Should have value for with with %v", chars)
+
+		// Make sure Delete works.
 		s.Nil(
 			s.db.Delete(key),
 			"Should get no error deleting key with %v", chars,

@@ -24,14 +24,26 @@ func Example() {
 		log.Fatal("flockd.Table", err)
 	}
 
-	// Store a key/value pair in the table.
+	// Add a key/value pair to the table.
 	key := "greeting"
-	if err := tbl.Set(key, []byte("Hello world!")); err != nil {
-		log.Fatal("flockd.Set", err)
+	if err := tbl.Add(key, []byte("Hello world!")); err != nil {
+		log.Fatal("flockd.Add", err)
 	}
 
 	// Fetch the value.
 	val, err := tbl.Get(key)
+	if err != nil {
+		log.Fatal("flockd.Get", err)
+	}
+	fmt.Println(string(val))
+
+	// Set the value.
+	if err := tbl.Set(key, []byte("Goodbye world!")); err != nil {
+		log.Fatal("flockd.Set", err)
+	}
+
+	// Fetch the newq value.
+	val, err = tbl.Get(key)
 	if err != nil {
 		log.Fatal("flockd.Get", err)
 	}
@@ -50,4 +62,5 @@ func Example() {
 
 	// Output:
 	// Hello world!
+	// Goodbye world!
 }
