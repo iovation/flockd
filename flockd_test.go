@@ -9,10 +9,12 @@ import (
 	"path/filepath"
 	"strconv"
 	"testing"
+	"time"
 )
 
 type TS struct {
-	db *DB
+	db  *DB
+	dir string
 	suite.Suite
 }
 
@@ -25,10 +27,11 @@ func (s *TS) SetupTest() {
 	if err != nil {
 		s.T().Fatal("TempDir", err)
 	}
-	db, err := New(dir)
+	db, err := New(dir, time.Millisecond)
 	s.NotNil(db, "Should have a db")
 	s.Nil(err, "Should have no error")
 	s.db = db
+	s.dir = dir
 }
 
 func (s *TS) TeardownTest() {
@@ -38,6 +41,9 @@ func (s *TS) TeardownTest() {
 
 func (s *TS) TestNew() {
 	s.NotNil(s.db, "Should have a db")
+	s.Equal(s.dir, s.db.root.path, "Path should be set")
+	s.Equal(time.Millisecond, s.db.root.timeout, "Timeout should be set")
+	s.NotNil(s.db.tables, "Should have tables map")
 }
 
 func (s *TS) TestBasic() {
@@ -57,6 +63,17 @@ func (s *TS) TestBasic() {
 	val, err = db.Get(key)
 	s.Nil(val, "Should again have no value")
 	s.EqualError(err, os.ErrNotExist.Error(), "Should have ErrNotExist error")
+}
+
+func (s *TS) TestBadTimeout() {
+	for _, timeout := range []time.Duration{0, -1, -100000} {
+		db, err := New("", timeout)
+		s.Nil(db, "Should have no DB for timeout %v", timeout)
+		s.EqualError(
+			err, "Invalid lock timeout",
+			"Should have error for timeout %v", timeout,
+		)
+	}
 }
 
 func (s *TS) TestFiles() {
@@ -85,6 +102,7 @@ func (s *TS) TestTable() {
 	tbl, err := s.db.Table(dirName)
 	s.Nil(err, "Should have no error from Table")
 	s.DirExists(subPath, "Directory %q should now exist", dirName)
+	s.Equal(db.root.timeout, tbl.timeout, "Should have timeout from DB")
 
 	key := "xoxoxoxoxoxo"
 	file := filepath.Join(subPath, key+".kv")
@@ -117,12 +135,17 @@ func (s *TS) TestTables() {
 	}
 
 	// Fill out a number of subdirectories.
-	for _, subDir := range tables {
+	for i, subDir := range tables {
 		subPath := filepath.Join(s.db.root.path, subDir+".tbl")
 		s.fileNotExists(subPath)
+		s.db.root.timeout = time.Millisecond * time.Duration(i+1)
 		tbl, err := s.db.Table(subDir)
 		s.Nil(err, "Should have no error creating Table %v", subDir)
 		s.DirExists(subPath, "Directory %q should now exist", subDir)
+		s.Equal(
+			s.db.root.timeout, tbl.timeout,
+			"Should have copied root timeout to %v", subDir,
+		)
 
 		mapped, ok := s.db.tables.Load(subDir)
 		s.True(ok, "Should have loaded Table %v", subDir)
@@ -175,7 +198,7 @@ func (s *TS) TestLock() {
 	s.Nil(s.db.Set(key, value), "Set %v", key)
 
 	// Take an exclusive lock on the file.
-	lock, err := lockFile(path, true)
+	lock, err := lockFile(path, true, time.Millisecond)
 	if err != nil {
 		s.T().Fatal("lockFile", err)
 	}
@@ -190,7 +213,7 @@ func (s *TS) TestLock() {
 
 	// Now take a shared lock.
 	lock.Unlock()
-	lock, err = lockFile(path, false)
+	lock, err = lockFile(path, false, time.Millisecond)
 	if err != nil {
 		s.T().Fatal("lockFile", err)
 	}
@@ -240,7 +263,7 @@ func (s *TS) TestDirKeyErrors() {
 }
 
 func (s *TS) TestDirErrors() {
-	db, err := New("README.md")
+	db, err := New("README.md", time.Millisecond)
 	s.Nil(db, "Should have no db for non-directory")
 	s.EqualError(
 		err, "mkdir README.md: not a directory",

@@ -23,7 +23,7 @@ func makeDB(b *testing.B) *DB {
 	if err != nil {
 		b.Fatal("TempDir", err)
 	}
-	db, err := New(dir)
+	db, err := New(dir, time.Millisecond)
 	if err != nil {
 		b.Fatal("New", err)
 	}

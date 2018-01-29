@@ -10,6 +10,7 @@ package flockd
 
 import (
 	"context"
+	"errors"
 	"github.com/theckman/go-flock"
 	"io/ioutil"
 	"os"
@@ -28,14 +29,20 @@ type DB struct {
 
 // Table represents a diretory into which keys and values can be written.
 type Table struct {
-	path string
+	path    string
+	timeout time.Duration
 }
 
 // New creates a new key/value database, with the specified directory as the
-// root table. If the directory does not exist, it will be created. Returns an
-// error if the directory creation fails.
-func New(dir string) (*DB, error) {
-	root, err := newTable(dir)
+// root table. If the directory does not exist, it will be created. The timeout
+// sets the maximum time flockd will wait for a file lock when attempting to
+// read or write a record, in nanoseconds. Returns an error if the directory
+// creation fails or if the timeout is less than or equal to zero.
+func New(dir string, timeout time.Duration) (*DB, error) {
+	if timeout <= 0 {
+		return nil, errors.New("Invalid lock timeout")
+	}
+	root, err := newTable(dir, timeout)
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +62,10 @@ func (db *DB) Table(subdir string) (*Table, error) {
 		return table.(*Table), nil
 	}
 
-	table, err := newTable(filepath.Join(db.root.path, subdir+".tbl"))
+	table, err := newTable(
+		filepath.Join(db.root.path, subdir+".tbl"),
+		db.root.timeout,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -63,11 +73,11 @@ func (db *DB) Table(subdir string) (*Table, error) {
 	return table, nil
 }
 
-func newTable(path string) (*Table, error) {
+func newTable(path string, timeout time.Duration) (*Table, error) {
 	if err := os.MkdirAll(path, 0755); err != nil {
 		return nil, err
 	}
-	return &Table{path: path}, nil
+	return &Table{path: path, timeout: timeout}, nil
 }
 
 // Get returns the value for the key by reading the file named for the key, plus
@@ -114,7 +124,7 @@ func (table *Table) Get(key string) ([]byte, error) {
 	defer fh.Close()
 
 	// Take a shared lock.
-	lock, err := lockFile(file, false)
+	lock, err := lockFile(file, false, table.timeout)
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +164,7 @@ func (table *Table) Set(key string, value []byte) error {
 	defer os.Remove(tmp)
 
 	// Take an exclusive lock on the temp file.
-	lock, err := lockFile(tmp, true)
+	lock, err := lockFile(tmp, true, table.timeout)
 	if err != nil {
 		return err
 	}
@@ -172,7 +182,7 @@ func (table *Table) Set(key string, value []byte) error {
 	// Open the key file.
 	// Take an exclusive lock on the key file.
 	file := filepath.Join(table.path, key+".kv")
-	lock2, err := lockFile(file, true)
+	lock2, err := lockFile(file, true, table.timeout)
 	if err != nil {
 		return err
 	}
@@ -213,7 +223,7 @@ func (table *Table) Delete(key string) error {
 	}
 
 	// Take an exclusive lock.
-	lock, err := lockFile(file, true)
+	lock, err := lockFile(file, true, table.timeout)
 	if err != nil {
 		return err
 	}
@@ -225,9 +235,9 @@ func (table *Table) Delete(key string) error {
 
 // lockFile tries to acquire a shared or exclusive lock on a file, waiting up to
 // a millisecond for the lock, and returns the lock or an error.
-func lockFile(path string, exclusive bool) (*flock.Flock, error) {
+func lockFile(path string, exclusive bool, timeout time.Duration) (*flock.Flock, error) {
 	flock := flock.NewFlock(path)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	try := flock.TryRLockContext
 	if exclusive {
@@ -235,7 +245,7 @@ func lockFile(path string, exclusive bool) (*flock.Flock, error) {
 	}
 
 	// Try to get the lock up to 100 times.
-	if _, err := try(ctx, time.Millisecond/100); err != nil {
+	if _, err := try(ctx, timeout/100); err != nil {
 		return nil, err
 	}
 	return flock, nil
