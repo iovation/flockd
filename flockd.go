@@ -5,12 +5,17 @@ file locking for concurrency safety. Keys correpond to files, values to their
 contents, and tables to directories. Files are share-locked on read (Get) and
 exclusive-locked on write (Set and Delete).
 
-This may be overkill.
+This may be overkill if you have only one application using a set of files in a
+directory. But if you need to sync files between multiple systems, like a
+distributed database, assuming your sync software respects file system locks,
+flockd might be a great way to go. This is especially true for modestly-sized
+databases and databases with a single primary instance and multiple read-only
+secondary instances.
 
 In any event, your file system must support proper file locking for this to
 work. If your file system does not, it might still work if file renaming and
-unlinking is atomic. If not, then all bets are off, and you can expect
-occaisional bad reads.
+unlinking is atomic and flockd is used exclusively to access files. If not,
+then all bets are off, and you can expect occasional bad reads.
 
 */
 package flockd
