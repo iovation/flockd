@@ -14,7 +14,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -133,11 +132,11 @@ func (table *Table) Get(key string) ([]byte, error) {
 // the extension ".kv", in the table directory. The key must not contain a path
 // separator character; if it does, os.ErrInvalid will be returned.
 //
-// To set the value, Set first creates a temporary file with the key name, plus
-// ".tmp" and the PID appended to it, and tries to acquire an exclusive lock. If
-// the temporary file already has exclusive lock, Set will wait up to a
-// millisecond to acquire the lock before returning a context.DeadlineExceeded
-// error. Once it has the lock, it writes the value to the temporary file.
+// To set the value, Set first creates a temporary file in the table directory
+// and tries to acquire an exclusive lock. If the temporary file already has
+// exclusive lock, Set will wait up to a millisecond to acquire the lock before
+// returning a context.DeadlineExceeded error. Once it has the lock, it writes
+// the value to the temporary file.
 //
 // Next, it tries to acquire an exclusive lock on the file with the key name,
 // again waiting up to a millisecond before returning a context.DeadlineExceeded
@@ -149,13 +148,9 @@ func (table *Table) Set(key string, value []byte) error {
 	}
 
 	// Create a temporary file to write to.
-	file := filepath.Join(table.path, key+".kv")
-	tmp := file + ".tmp" + strconv.Itoa(os.Getpid())
-	fh, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY, 0600)
-	if err != nil {
-		return err
-	}
+	fh, err := ioutil.TempFile(table.path, key+".kv")
 	defer fh.Close()
+	tmp := fh.Name()
 	defer os.Remove(tmp)
 
 	// Take an exclusive lock on the temp file.
@@ -169,22 +164,19 @@ func (table *Table) Set(key string, value []byte) error {
 	if _, err := fh.Write(value); err != nil {
 		return err
 	}
+	if err := fh.Sync(); err != nil {
+		return err
+	}
 
 	// XXX Is it necessary to lock the destination file?
 	// Open the key file.
-	fh2, err := os.OpenFile(file, os.O_CREATE|os.O_RDONLY, 0600)
-	if err != nil {
-		return err
-	}
-	defer fh2.Close()
-
 	// Take an exclusive lock on the key file.
+	file := filepath.Join(table.path, key+".kv")
 	lock2, err := lockFile(file, true)
 	if err != nil {
 		return err
 	}
 	defer lock2.Unlock()
-	// XXX Destination file lock code end.
 
 	// Move the file.
 	return os.Rename(tmp, file)

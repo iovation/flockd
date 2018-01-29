@@ -237,16 +237,6 @@ func (s *TS) TestDirKeyErrors() {
 	s.DirExists(dir, "Directory %q should still exist", dirName)
 	s.NotNil(s.db.Delete(dirName), "Should have an error from Delete for directory")
 	s.DirExists(dir, "Directory %q should still exist", dirName)
-
-	// Make sure it fails on a directory with the temp filename, too.
-	tmpFile := filepath.Join(s.db.root.path, "bar.kv"+tmpExt())
-	if err := os.MkdirAll(tmpFile, 0755); err != nil {
-		s.T().Fatal("MkdirAll", err)
-	}
-	s.NotNil(
-		s.db.Set("bar", []byte{}),
-		"Should have error directory in the way of a temp file",
-	)
 }
 
 func (s *TS) TestDirErrors() {
@@ -310,22 +300,6 @@ func (s *TS) TestKeys() {
 		)
 		s.fileNotExists(path)
 	}
-}
-
-func (s *TS) TestTempLock() {
-	key := "foo"
-	path := filepath.Join(s.db.root.path, key+".kv")
-	tmp := path + tmpExt()
-
-	// Take an exclusive lock on the temp file.
-	lock, err := lockFile(tmp, true)
-	if err != nil {
-		s.T().Fatal("lockFile", err)
-	}
-	defer lock.Unlock()
-
-	s.Equal(s.db.Set(key, nil), context.DeadlineExceeded, "Should have timeout error from Set")
-	s.fileNotExists(path)
 }
 
 func (s *TS) fileContains(path string, data []byte) bool {
