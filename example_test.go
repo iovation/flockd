@@ -42,7 +42,7 @@ func Example() {
 		log.Fatal("flockd.Set", err)
 	}
 
-	// Fetch the newq value.
+	// Fetch the new value.
 	val, err = tbl.Get(key)
 	if err != nil {
 		log.Fatal("flockd.Get", err)
