@@ -26,8 +26,8 @@ func Example() {
 
 	// Add a key/value pair to the table.
 	key := "greeting"
-	if err := tbl.Add(key, []byte("Hello world!")); err != nil {
-		log.Fatal("flockd.Add", err)
+	if err := tbl.Create(key, []byte("Hello world!")); err != nil {
+		log.Fatal("flockd.Create", err)
 	}
 
 	// Fetch the value.

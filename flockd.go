@@ -98,11 +98,11 @@ func (db *DB) Get(key string) ([]byte, error) {
 	return db.root.Get(key)
 }
 
-// Add adds the key/value pair by writing it to the file named for the key, plus
-// the extension ".kv", in the root directory, but only if the file does not
-// already exist.
-func (db *DB) Add(key string, val []byte) error {
-	return db.root.Add(key, val)
+// Create creates the key/value pair by writing it to the file named for the
+// key, plus the extension ".kv", in the root directory, but only if the file
+// does not already exist.
+func (db *DB) Create(key string, val []byte) error {
+	return db.root.Create(key, val)
 }
 
 // Set sets the value for the key by writing it to the file named for the key,
@@ -214,24 +214,24 @@ func (table *Table) Set(key string, value []byte) error {
 	return os.Rename(tmp, file)
 }
 
-// add adds the key/value pair by writing it to the file named for key, plus the
-// extension ".kv", in the table directory, but only if the file does not
-// already exist. The key must not contain a path separator character; if it
+// Create creates the key/value pair by writing it to the file named for key,
+// plus the extension ".kv", in the table directory, but only if the file does
+// not already exist. The key must not contain a path separator character; if it
 // does, os.ErrInvalid will be returned. Returns os.ErrExist if the file already
 // exists.
 //
-// To add the value, Add first opens the file with the key name, but only if it
+// To create the file, Create first opens it with the key name, but only if it
 // doesn't already exist. It then tries to acquire an exclusive lock on the
 // file. It tries only once, and doesn't wait for a lock, so that if any other
 // process first got a lock, the file would be considered to already exist.
-
-// Add then creates a temporary file in the table directory and tries to acquire
-// an exclusive lock. If the temporary file already has exclusive lock, Add will
-// wait up to the timeout set for the database to acquire the lock before
-// returning a context.DeadlineExceeded error. Once it has the lock, it writes
-// the value to the temporary file, then moves the temporary file to the new
-// file.
-func (table *Table) Add(key string, value []byte) error {
+//
+// Create then creates a temporary file in the table directory and tries to
+// acquire an exclusive lock. If the temporary file already has exclusive lock,
+// Create will wait up to the timeout set for the database to acquire the lock
+// before returning a context.DeadlineExceeded error. Once it has the lock, it
+// writes the value to the temporary file, then moves the temporary file to the
+// new file.
+func (table *Table) Create(key string, value []byte) error {
 	// Make sure there is no directory separator.
 	if strings.ContainsRune(key, os.PathSeparator) {
 		return os.ErrInvalid
