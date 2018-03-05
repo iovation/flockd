@@ -3,13 +3,14 @@ package flockd
 import (
 	"context"
 	"fmt"
-	"github.com/stretchr/testify/suite"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/suite"
 )
 
 type TS struct {
@@ -53,16 +54,25 @@ func (s *TS) TestBasic() {
 	s.Nil(val, "Should have no value")
 	s.EqualError(err, os.ErrNotExist.Error(), "Should have ErrNotExist error")
 	s.Nil(db.Delete(key), "Should get no error deleting nonexistent key")
+	s.EqualError(
+		db.Update(key, []byte("hi")), os.ErrNotExist.Error(),
+		"Should get ErrNotExist error updating nonexistent key",
+	)
 
-	s.Nil(db.Create(key, []byte("hello")), "Should have no error on add")
+	s.Nil(db.Create(key, []byte("hello")), "Should have no error on create")
 	val, err = db.Get(key)
 	s.Nil(err, "Should have no error from Get")
-	s.Equal([]byte("hello"), val, "Should have the added value")
+	s.Equal([]byte("hello"), val, "Should have the created value")
 
 	s.Nil(db.Set(key, []byte("goodbye")), "Should have no error on set")
 	val, err = db.Get(key)
 	s.Nil(err, "Should have no error from Get")
 	s.Equal([]byte("goodbye"), val, "Should have the set value")
+
+	s.Nil(db.Update(key, []byte("terminate")), "Should have no error on update")
+	val, err = db.Get(key)
+	s.Nil(err, "Should have no error from Get")
+	s.Equal([]byte("terminate"), val, "Should have the updated value")
 
 	s.Nil(db.Delete(key), "Should have no error from Delete")
 	val, err = db.Get(key)
@@ -98,7 +108,7 @@ func (s *TS) TestFiles() {
 	s.fileNotExists(file)
 
 	// Create should also create a file.
-	s.Nil(db.Create(key, val), "Should have no error on add")
+	s.Nil(db.Create(key, val), "Should have no error on create")
 	s.FileExists(file, "File %q should now exist")
 	s.fileNotExists(file + tmpExt())
 	s.fileContains(file, []byte("hello"))
@@ -106,6 +116,13 @@ func (s *TS) TestFiles() {
 	// But it should fail if the file already exists.
 	s.Equal(db.Create(key, nil), os.ErrExist, "Create should fail for existing file")
 	s.Nil(db.Delete(key), "Should have no error from Delete")
+	s.fileNotExists(file)
+
+	// Update should not create a file.
+	s.Equal(
+		db.Update(key, nil), os.ErrNotExist,
+		"Update should fail for nonexistant file",
+	)
 	s.fileNotExists(file)
 }
 
@@ -143,7 +160,7 @@ func (s *TS) TestTable() {
 	s.EqualError(err, os.ErrNotExist.Error(), "Should have ErrNotExist error")
 
 	// Create should also create a file.
-	s.Nil(tbl.Create(key, val), "Should have no error on add")
+	s.Nil(tbl.Create(key, val), "Should have no error on create")
 	s.FileExists(file, "File %q should exist again")
 	s.fileContains(file, val)
 
@@ -154,6 +171,12 @@ func (s *TS) TestTable() {
 
 	// But it should fail if the file already exists.
 	s.Equal(tbl.Create(key, nil), os.ErrExist, "Create should fail for existing file")
+
+	// Update should update the file.
+	val = []byte("goodbye")
+	s.Nil(tbl.Update(key, val), "Should have no error on update")
+	s.FileExists(file, "File %q should still exist")
+	s.fileContains(file, val)
 }
 
 func (s *TS) TestTables() {
@@ -241,6 +264,8 @@ func (s *TS) TestLock() {
 	s.Equal(err, context.DeadlineExceeded, "Should have timeout error from Get")
 	s.Equal(s.db.Set(key, nil), context.DeadlineExceeded, "Should have timeout error from Set")
 	s.fileNotExists(path + tmpExt())
+	s.Equal(s.db.Update(key, nil), context.DeadlineExceeded, "Should have timeout error from Update")
+	s.fileNotExists(path + tmpExt())
 	s.Equal(s.db.Delete(key), context.DeadlineExceeded, "Should have timeout error from Delete")
 	s.FileExists(path, "The file should still be present")
 
@@ -255,6 +280,8 @@ func (s *TS) TestLock() {
 	s.Equal(string(value), string(val), "Should have value from sharelocked file")
 	s.Equal(s.db.Set(key, nil), context.DeadlineExceeded, "Should have timeout error from Set")
 	s.fileNotExists(path + tmpExt())
+	s.Equal(s.db.Update(key, nil), context.DeadlineExceeded, "Should have timeout error from Update")
+	s.FileExists(path, "The file should still be present")
 	s.Equal(s.db.Delete(key), context.DeadlineExceeded, "Should have timeout error from Delete")
 	s.FileExists(path, "The file should still be present")
 }
@@ -276,6 +303,10 @@ func (s *TS) TestKeyPathErrors() {
 		"Should have os.ErrInvalid from Set for bad key",
 	)
 	s.Equal(
+		s.db.Update(badKey, nil), os.ErrInvalid,
+		"Should have os.ErrInvalid from Update for bad key",
+	)
+	s.Equal(
 		s.db.Delete(badKey), os.ErrInvalid,
 		"Should have os.ErrInvalid from Delete for bad key",
 	)
@@ -294,6 +325,7 @@ func (s *TS) TestDirKeyErrors() {
 	s.NotNil(err, "Should have an error from Get for directory")
 	s.DirExists(dir, "Directory %q should still exist", dirName)
 	s.NotNil(s.db.Create(dirName, nil), "Should have an error from Create for directory")
+	s.NotNil(s.db.Update(dirName, nil), "Should have an error from Update for directory")
 	s.NotNil(s.db.Set(dirName, nil), "Should have an error from Set for directory")
 	s.DirExists(dir, "Directory %q should still exist", dirName)
 	s.NotNil(s.db.Delete(dirName), "Should have an error from Delete for directory")
@@ -350,7 +382,7 @@ func (s *TS) TestKeys() {
 		// Make sure Create and Get work.
 		s.Nil(
 			s.db.Create(key, []byte("Create:"+key)),
-			"Should get no error adding key with %v", chars,
+			"Should get no error creating key with %v", chars,
 		)
 		s.FileExists(path, "Should have file with %v", chars)
 		val, err := s.db.Get(key)
@@ -365,6 +397,15 @@ func (s *TS) TestKeys() {
 		val, err = s.db.Get(key)
 		s.Nil(err, "Should have no error getting key with %v", chars)
 		s.Equal(string(val), "Set:"+key, "Should have value for with with %v", chars)
+
+		// Make sure Update and Get work.
+		s.Nil(
+			s.db.Update(key, []byte("Update:"+key)),
+			"Should get no error updating key with %v", chars,
+		)
+		val, err = s.db.Get(key)
+		s.Nil(err, "Should have no error getting key with %v", chars)
+		s.Equal(string(val), "Update:"+key, "Should have value for with with %v", chars)
 
 		// Make sure Delete works.
 		s.Nil(

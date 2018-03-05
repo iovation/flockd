@@ -99,11 +99,18 @@ func (db *DB) Get(key string) ([]byte, error) {
 	return db.root.Get(key)
 }
 
-// Create creates the key/value pair by writing it to the file named for the
-// key, plus the extension ".kv", in the root directory, but only if the file
-// does not already exist.
+// Create creates the key/value pair by writing it to a file named for the key,
+// plus the extension ".kv", in the root directory, but only if the file does
+// not already exist.
 func (db *DB) Create(key string, val []byte) error {
 	return db.root.Create(key, val)
+}
+
+// Update updates the key/value pair by writing it to a file named for the key,
+// plus the extension ".kv", in the root directory, but only if the file
+// already exists.
+func (db *DB) Update(key string, val []byte) error {
+	return db.root.Update(key, val)
 }
 
 // Set sets the value for the key by writing it to the file named for the key,
@@ -169,8 +176,9 @@ func (table *Table) Get(key string) ([]byte, error) {
 // has the lock, it writes the value to the temporary file.
 //
 // Next, it tries to acquire an exclusive lock on the file with the key name,
-// again waiting up to a millisecond before returning a context.DeadlineExceeded
-// error. Once it has the lock, it moves the temporary file to the new file.
+// again waiting up to the database timeout before returning a
+// context.DeadlineExceeded error. Once it has the lock, it moves the temporary
+// file to the new file.
 func (table *Table) Set(key string, value []byte) error {
 	// Make sure there is no directory separator.
 	if strings.ContainsRune(key, os.PathSeparator) {
@@ -256,6 +264,59 @@ func (table *Table) Create(key string, value []byte) error {
 	return os.Rename(tmp.file, file)
 }
 
+// Update updates the value for the key by writing it to an existing file named
+// for key, plus the extension ".kv", in the table directory. The key must not
+// contain a path separator character; if it does, os.ErrInvalid will be
+// returned. If the file does not already exist, os.ErrNotExist will be
+// returned.
+//
+// To update the file, Update first opens the file with the key name for
+// writing. If the file does not exist, os.ErrNotExist will be returned.
+//
+// Next, Update creates a temporary file in the table directory and tries to
+// acquire an exclusive lock. If the temporary file already has exclusive lock,
+// Update will wait up to the timeout set for the database to acquire the lock
+// before returning a context.DeadlineExceeded error. Once it has the lock, it
+// writes the value to the temporary file.
+//
+// Next, it tries to acquire an exclusive lock on the opened file, again waiting
+// up to the database timeout before returning a context.DeadlineExceeded error.
+// Once it has the lock, it moves the temporary file to the new file.
+func (table *Table) Update(key string, value []byte) error {
+	// Make sure there is no directory separator.
+	if strings.ContainsRune(key, os.PathSeparator) {
+		return os.ErrInvalid
+	}
+
+	// Open the file.
+	file := filepath.Join(table.path, key+".kv")
+	fh, err := os.OpenFile(file, os.O_WRONLY, 0600)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return os.ErrNotExist
+		}
+		return err
+	}
+	defer fh.Close()
+
+	// Write to a temporary file.
+	tmp, err := table.writeTemp(key, value)
+	if err != nil {
+		return err
+	}
+	defer tmp.Release()
+
+	// Take an exclusive lock on the key file.
+	lock, err := lockFile(file, true, table.timeout)
+	if err != nil {
+		return err
+	}
+	defer lock.Unlock()
+
+	// Move the file.
+	return os.Rename(tmp.file, file)
+}
+
 // Delete deletes the key and its value by deleting the file named for key, plus
 // the extension ".kv", from the table directory. The key must not contain a
 // path separator character; if it does, os.ErrInvalid will be returned. Before
@@ -298,7 +359,7 @@ func (table *Table) Delete(key string) error {
 }
 
 // lockFile tries to acquire a shared or exclusive lock on a file, waiting up to
-// a millisecond for the lock, and returns the lock or an error.
+// timeout for the lock, and returns the lock or an error.
 func lockFile(path string, exclusive bool, timeout time.Duration) (*flock.Flock, error) {
 	flock := flock.NewFlock(path)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
