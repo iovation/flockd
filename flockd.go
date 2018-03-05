@@ -23,13 +23,14 @@ package flockd
 import (
 	"context"
 	"errors"
-	"github.com/theckman/go-flock"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/theckman/go-flock"
 )
 
 // DB defines a file system directory as the root for a simple key/value
@@ -176,42 +177,25 @@ func (table *Table) Set(key string, value []byte) error {
 		return os.ErrInvalid
 	}
 
-	// Create a temporary file to write to.
-	fh, err := ioutil.TempFile(table.path, key+".kv")
+	// Write to a temporary file.
+	tmp, err := table.writeTemp(key, value)
 	if err != nil {
 		return err
 	}
-	defer fh.Close()
-	tmp := fh.Name()
-	defer os.Remove(tmp)
-
-	// Take an exclusive lock on the temp file.
-	lock, err := lockFile(tmp, true, table.timeout)
-	if err != nil {
-		return err
-	}
-	defer lock.Unlock()
-
-	// Write to the file.
-	if _, err := fh.Write(value); err != nil {
-		return err
-	}
-	if err := fh.Sync(); err != nil {
-		return err
-	}
+	defer tmp.Release()
 
 	// XXX Is it necessary to lock the destination file?
 	// Open the key file.
 	// Take an exclusive lock on the key file.
 	file := filepath.Join(table.path, key+".kv")
-	lock2, err := lockFile(file, true, table.timeout)
+	lock, err := lockFile(file, true, table.timeout)
 	if err != nil {
 		return err
 	}
-	defer lock2.Unlock()
+	defer lock.Unlock()
 
 	// Move the file.
-	return os.Rename(tmp, file)
+	return os.Rename(tmp.file, file)
 }
 
 // Create creates the key/value pair by writing it to the file named for key,
@@ -261,32 +245,15 @@ func (table *Table) Create(key string, value []byte) error {
 	}
 	defer lock.Unlock()
 
-	// Create a temporary file to write to.
-	tf, err := ioutil.TempFile(table.path, key+".kv")
+	// Write to a temporary file.
+	tmp, err := table.writeTemp(key, value)
 	if err != nil {
 		return err
 	}
-	defer tf.Close()
-	tmp := tf.Name()
-	defer os.Remove(tmp)
-
-	// Take an exclusive lock on the temp file.
-	lock2, err := lockFile(tmp, true, table.timeout)
-	if err != nil {
-		return err
-	}
-	defer lock2.Unlock()
-
-	// Write to the temp file.
-	if _, err := tf.Write(value); err != nil {
-		return err
-	}
-	if err := tf.Sync(); err != nil {
-		return err
-	}
+	defer tmp.Release()
 
 	// Move the file.
-	return os.Rename(tmp, file)
+	return os.Rename(tmp.file, file)
 }
 
 // Delete deletes the key and its value by deleting the file named for key, plus
@@ -346,4 +313,44 @@ func lockFile(path string, exclusive bool, timeout time.Duration) (*flock.Flock,
 		return nil, err
 	}
 	return flock, nil
+}
+
+type tmpFile struct {
+	file string
+	lock *flock.Flock
+}
+
+func (tmp *tmpFile) Release() {
+	tmp.lock.Unlock()
+	os.Remove(tmp.file)
+
+}
+
+func (table *Table) writeTemp(key string, value []byte) (*tmpFile, error) {
+	// Create a temporary file to write to.
+	tf, err := ioutil.TempFile(table.path, key+".kv")
+	if err != nil {
+		return nil, err
+	}
+	defer tf.Close()
+	tmp := &tmpFile{file: tf.Name()}
+
+	// Take an exclusive lock on the temp file.
+	lock, err := lockFile(tmp.file, true, table.timeout)
+	if err != nil {
+		os.Remove(tmp.file)
+		return nil, err
+	}
+	tmp.lock = lock
+
+	// Write to the temp file.
+	if _, err := tf.Write(value); err != nil {
+		tmp.Release()
+		return nil, err
+	}
+	if err := tf.Sync(); err != nil {
+		tmp.Release()
+		return nil, err
+	}
+	return tmp, nil
 }
