@@ -28,7 +28,7 @@ func (s *TS) SetupTest() {
 	if err != nil {
 		s.T().Fatal("TempDir", err)
 	}
-	db, err := New(dir, time.Millisecond)
+	db, err := New(dir, 10*time.Millisecond)
 	s.NotNil(db, "Should have a db")
 	s.Nil(err, "Should have no error")
 	s.db = db
@@ -43,7 +43,7 @@ func (s *TS) TeardownTest() {
 func (s *TS) TestNew() {
 	s.NotNil(s.db, "Should have a db")
 	s.Equal(s.dir, s.db.root.path, "Path should be set")
-	s.Equal(time.Millisecond, s.db.root.timeout, "Timeout should be set")
+	s.Equal(10*time.Millisecond, s.db.root.timeout, "Timeout should be set")
 	s.NotNil(s.db.tables, "Should have tables map")
 }
 
