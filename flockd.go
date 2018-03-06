@@ -33,6 +33,11 @@ import (
 	"github.com/theckman/go-flock"
 )
 
+const (
+	tblExt = ".tbl"
+	recExt = ".kv"
+)
+
 // DB defines a file system directory as the root for a simple key/value
 // database.
 type DB struct {
@@ -67,16 +72,16 @@ func New(dir string, timeout time.Duration) (*DB, error) {
 // plus the extension ".tbl". Keys and values can be written directly to the
 // table. Pass a path created by filepath.Join to create a deeper subdirectory.
 // If the directory does not exist, it will be created. Returns an error if the
-// directory creation fails. If the table has been created previously, it will
-// be returned immediately without checking for the existence of the directory
-// on the file system.
+// directory creation fails. If the table has been created previously for the
+// instance of the database, it will be returned immediately without checking
+// for the existence of the directory on the file system.
 func (db *DB) Table(subdir string) (*Table, error) {
 	if table, ok := db.tables.Load(subdir); ok {
 		return table.(*Table), nil
 	}
 
 	table, err := newTable(
-		filepath.Join(db.root.path, subdir+".tbl"),
+		filepath.Join(db.root.path, subdir+tblExt),
 		db.root.timeout,
 	)
 	if err != nil {
@@ -125,6 +130,29 @@ func (db *DB) Delete(key string) error {
 	return db.root.Delete(key)
 }
 
+// Tables returns all of the tables in the database. Tables are defined as the
+// root directory and any subdirectory with the extenion ".tbl". This function
+// actively walks the file system from the root directory to find the table
+// directories and does not cache the results.
+func (db *DB) Tables() ([]*Table, error) {
+	timeout := db.root.timeout
+	rootPath := db.root.path
+	tables := []*Table{}
+	if err := filepath.Walk(rootPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() || (filepath.Ext(path) != tblExt && path != rootPath) {
+			return nil
+		}
+		tables = append(tables, &Table{path: path, timeout: timeout})
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return tables, nil
+}
+
 // Get returns the value for the key by reading the file named for key, plus the
 // extension ".kv", from the table directory. The key must not contain a path
 // separator character; if it does, os.ErrInvalid will be returned. If the file
@@ -140,7 +168,7 @@ func (table *Table) Get(key string) ([]byte, error) {
 	}
 
 	// Open the file.
-	file := filepath.Join(table.path, key+".kv")
+	file := filepath.Join(table.path, key+recExt)
 	fh, err := os.Open(file)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -195,7 +223,7 @@ func (table *Table) Set(key string, value []byte) error {
 	// XXX Is it necessary to lock the destination file?
 	// Open the key file.
 	// Take an exclusive lock on the key file.
-	file := filepath.Join(table.path, key+".kv")
+	file := filepath.Join(table.path, key+recExt)
 	lock, err := lockFile(file, true, table.timeout)
 	if err != nil {
 		return err
@@ -230,7 +258,7 @@ func (table *Table) Create(key string, value []byte) error {
 	}
 
 	// Open the destination file, but only if it doesn't already exist.
-	file := filepath.Join(table.path, key+".kv")
+	file := filepath.Join(table.path, key+recExt)
 	fh, err := os.OpenFile(file, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
 		if os.IsExist(err) {
@@ -289,7 +317,7 @@ func (table *Table) Update(key string, value []byte) error {
 	}
 
 	// Open the file.
-	file := filepath.Join(table.path, key+".kv")
+	file := filepath.Join(table.path, key+recExt)
 	fh, err := os.OpenFile(file, os.O_WRONLY, 0600)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -331,7 +359,7 @@ func (table *Table) Delete(key string) error {
 	}
 
 	// Open the file.
-	file := filepath.Join(table.path, key+".kv")
+	file := filepath.Join(table.path, key+recExt)
 	fh, err := os.Open(file)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -389,7 +417,7 @@ func (tmp *tmpFile) Release() {
 
 func (table *Table) writeTemp(key string, value []byte) (*tmpFile, error) {
 	// Create a temporary file to write to.
-	tf, err := ioutil.TempFile(table.path, key+".kv")
+	tf, err := ioutil.TempFile(table.path, key+recExt)
 	if err != nil {
 		return nil, err
 	}

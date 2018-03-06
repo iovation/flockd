@@ -94,7 +94,7 @@ func (s *TS) TestBadTimeout() {
 func (s *TS) TestFiles() {
 	db := s.db
 	key := "foo"
-	file := filepath.Join(db.root.path, key+".kv")
+	file := filepath.Join(db.root.path, key+recExt)
 	s.fileNotExists(file)
 
 	// Set should create a file.
@@ -129,7 +129,7 @@ func (s *TS) TestFiles() {
 func (s *TS) TestTable() {
 	db := s.db
 	dirName := "realm"
-	subPath := filepath.Join(db.root.path, dirName+".tbl")
+	subPath := filepath.Join(db.root.path, dirName+tblExt)
 	s.fileNotExists(subPath)
 
 	tbl, err := s.db.Table(dirName)
@@ -138,7 +138,7 @@ func (s *TS) TestTable() {
 	s.Equal(db.root.timeout, tbl.timeout, "Should have timeout from DB")
 
 	key := "xoxoxoxoxoxo"
-	file := filepath.Join(subPath, key+".kv")
+	file := filepath.Join(subPath, key+recExt)
 	s.fileNotExists(file)
 
 	// Set should create a file.
@@ -188,7 +188,7 @@ func (s *TS) TestTables() {
 
 	// Fill out a number of subdirectories.
 	for i, subDir := range tables {
-		subPath := filepath.Join(s.db.root.path, subDir+".tbl")
+		subPath := filepath.Join(s.db.root.path, subDir+tblExt)
 		s.fileNotExists(subPath)
 		s.db.root.timeout = time.Millisecond * time.Duration(i+1)
 		tbl, err := s.db.Table(subDir)
@@ -205,8 +205,8 @@ func (s *TS) TestTables() {
 
 		val := []byte(subDir)
 		for _, key := range []string{"strongrrl", "theory", "lily"} {
-			keyPath := filepath.Join(tbl.path, key+".kv")
-			keyTable := filepath.Join(subDir, key+".kv")
+			keyPath := filepath.Join(tbl.path, key+recExt)
+			keyTable := filepath.Join(subDir, key+recExt)
 			s.fileNotExists(keyPath)
 			s.Nil(tbl.Set(key, val), "Should set val in %q", keyTable)
 			s.FileExists(keyPath, "File %q should now exist", keyTable)
@@ -224,13 +224,13 @@ func (s *TS) TestTables() {
 		s.Nil(err, "Should have no error creating Table %v", subDir)
 		val := []byte(subDir)
 		for _, key := range []string{"strongrrl", "theory", "lily"} {
-			keyTable := filepath.Join(subDir, key+".kv")
+			keyTable := filepath.Join(subDir, key+recExt)
 			got, err := tbl.Get(key)
 			s.Nil(err, "Should have no error fetching %q again", keyTable)
 			s.Equal(val, got, "Should again have the value from %q", keyTable)
 
 			// Delete should delete the file.
-			keyPath := filepath.Join(tbl.path, key+".kv")
+			keyPath := filepath.Join(tbl.path, key+recExt)
 			s.Nil(tbl.Delete(key), "Should have no error deleting %q", keyTable)
 			s.fileNotExists(keyPath)
 			got, err = tbl.Get(key)
@@ -246,7 +246,7 @@ func (s *TS) TestTables() {
 func (s *TS) TestLock() {
 	key := "whatever"
 	value := []byte("🤘🎉💩")
-	path := filepath.Join(s.db.root.path, key+".kv")
+	path := filepath.Join(s.db.root.path, key+recExt)
 	s.Nil(s.db.Set(key, value), "Set %v", key)
 
 	// Take an exclusive lock on the file.
@@ -315,7 +315,7 @@ func (s *TS) TestKeyPathErrors() {
 func (s *TS) TestDirKeyErrors() {
 	// A directory should not work as a key.
 	dirName := "aDirectory"
-	dir := filepath.Join(s.db.root.path, dirName+".kv")
+	dir := filepath.Join(s.db.root.path, dirName+recExt)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		s.T().Fatal("MkdirAll", err)
 	}
@@ -355,7 +355,7 @@ func (s *TS) TestDirErrors() {
 
 func (s *TS) TestOpenErrors() {
 	key := "deny"
-	path := filepath.Join(s.db.root.path, key+".kv")
+	path := filepath.Join(s.db.root.path, key+recExt)
 	s.Nil(s.db.Set(key, []byte("whatever")), "Set %v", key)
 
 	// Remove all permissions.
@@ -378,7 +378,7 @@ func (s *TS) TestKeys() {
 		"bang":                "foo!bar",
 		"emoji":               "🤘🎉💩",
 	} {
-		path := filepath.Join(s.db.root.path, key+".kv")
+		path := filepath.Join(s.db.root.path, key+recExt)
 		// Make sure Create and Get work.
 		s.Nil(
 			s.db.Create(key, []byte("Create:"+key)),
@@ -413,6 +413,91 @@ func (s *TS) TestKeys() {
 			"Should get no error deleting key with %v", chars,
 		)
 		s.fileNotExists(path)
+	}
+}
+
+func (s *TS) TestForEach() {
+	// Create a bunch of tables.
+	dirs := []string{
+		"foo",
+		"bar",
+		"hi",
+		filepath.Join("foo", "sub"),
+		filepath.Join("foo", "ex"),
+		filepath.Join("foo", "ex", "more"),
+		filepath.Join("bar", "yo"),
+	}
+	tables := make(map[string]*Table, len(dirs)+1)
+	tables[s.db.root.path] = s.db.root
+	for _, dir := range dirs {
+		tbl, err := s.db.Table(dir)
+		if err != nil {
+			s.T().Fatal("Table", dir, ":", err)
+		}
+		tables[tbl.path] = tbl
+	}
+
+	// Find all the tables.
+	found, err := s.db.Tables()
+	s.Nil(err, "Should have no error from Tables")
+	s.Len(found, len(tables), "Should have the correct number of tables")
+
+	// Make sure they're all as expected.
+	for _, tbl := range found {
+		s.Equal(tables[tbl.path], tbl, "Should have table %v", tbl.path)
+	}
+
+	// Add subdirectories with no table directories.
+	for _, path := range []string{
+		filepath.Join(s.db.root.path, "none"),
+		filepath.Join(s.db.root.path, "nonesuch"),
+		filepath.Join(s.db.root.path, "none", "empty"),
+		filepath.Join(s.db.root.path, "nope", "nothing", "to", "see", "here"),
+	} {
+		if err := os.MkdirAll(path, 0755); err != nil {
+			s.T().Fatal("MkdirAll", path, ":", err)
+		}
+	}
+
+	// Find and validate all the tables again.
+	found, err = s.db.Tables()
+	s.Nil(err, "Should still have no error from Tables")
+	s.Len(found, len(tables), "Should again have the correct number of tables")
+	for _, tbl := range found {
+		s.Equal(tables[tbl.path], tbl, "Should have table %v", tbl.path)
+	}
+
+	// Add some files.
+	for _, fn := range []string{
+		filepath.Join(s.db.root.path, "none", "hi"),
+		filepath.Join(s.db.root.path, "foo", "hi"),
+		filepath.Join(s.db.root.path, "foo", "hi"+recExt),
+		filepath.Join(s.db.root.path, "foo", "ex", "more.kv"),
+	} {
+		if err := ioutil.WriteFile(fn, []byte("hi"), 0666); err != nil {
+			s.T().Fatal("WriteFile", fn, ":", err)
+		}
+	}
+
+	// Find and validate all the tables onece more.
+	found, err = s.db.Tables()
+	s.Nil(err, "Should again have no error from Tables")
+	s.Len(found, len(tables), "Should still have the correct number of tables")
+	for _, tbl := range found {
+		s.Equal(tables[tbl.path], tbl, "Should have table %v", tbl.path)
+	}
+
+	// Trigger an error.
+	if err := os.Chmod(filepath.Join(s.db.root.path, "foo"), 0); err != nil {
+		s.T().Fatal("Chmod:", err)
+	}
+	found, err = s.db.Tables()
+	s.Nil(found, "Should have no tables")
+	if s.NotNil(err, "Should have an error") {
+		s.IsType(
+			new(os.PathError), err,
+			"Its should be an os.PathError",
+		)
 	}
 }
 
