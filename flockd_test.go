@@ -179,7 +179,7 @@ func (s *TS) TestTable() {
 	s.fileContains(file, val)
 }
 
-func (s *TS) TestTables() {
+func (s *TS) TestMultipleTables() {
 	tables := []string{
 		"yack",
 		"this and that",
@@ -416,7 +416,7 @@ func (s *TS) TestKeys() {
 	}
 }
 
-func (s *TS) TestForEach() {
+func (s *TS) TestTables() {
 	// Create a bunch of tables.
 	dirs := []string{
 		"foo",
