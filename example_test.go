@@ -2,10 +2,11 @@ package flockd_test
 
 import (
 	"fmt"
-	"github.com/theory/flockd"
 	"log"
 	"os"
 	"time"
+
+	"source.iovation.com/iol/flockd"
 )
 
 var timeout = 10 * time.Millisecond
@@ -16,7 +17,7 @@ func Example() {
 	if err != nil {
 		log.Fatal("flockd.New", err)
 	}
-	defer os.Remove("flockd.db")
+	defer os.RemoveAll("flockd.db")
 
 	// Create a table.
 	tbl, err := db.Table("foo")
