@@ -2,8 +2,8 @@
 
 Package flockd provides a simple file system-based key/value database that uses
 file locking for concurrency safety. Keys correpond to files, values to their
-contents, and tables to directories. Files are share-locked on read (Get) and
-exclusive-locked on write (Set and Delete).
+contents, and tables to directories. Files are share-locked on read (Get and
+ForEach) and exclusive-locked on write (Set, Create, Update, and Delete).
 
 This may be overkill if you have only one application using a set of files in a
 directory. But if you need to sync files between multiple systems, like a
@@ -14,8 +14,10 @@ secondary instances.
 
 In any event, your file system must support proper file locking for this to
 work. If your file system does not, it might still work if file renaming and
-unlinking is atomic and flockd is used exclusively to access files. If not,
-then all bets are off, and you can expect occasional bad reads.
+unlinking is atomic and flockd is used exclusively to access files. If not, then
+all bets are off, and you can expect occasional bad reads.
+
+All of this may turn out to be a bad idea. YMMV. Warranty not included.
 
 */
 package flockd
@@ -23,6 +25,7 @@ package flockd
 import (
 	"context"
 	"errors"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -34,8 +37,9 @@ import (
 )
 
 const (
-	tblExt = ".tbl"
-	recExt = ".kv"
+	tblExt  = ".tbl"
+	recExt  = ".kv"
+	readNum = 1024
 )
 
 // DB defines a file system directory as the root for a simple key/value
@@ -128,6 +132,13 @@ func (db *DB) Set(key string, val []byte) error {
 // plus the extension ".kv", in the root directory.
 func (db *DB) Delete(key string) error {
 	return db.root.Delete(key)
+}
+
+// ForEach finds each file withj the extension ".kv" in the root directory and
+// calls the specififed function, passing the file's key and value (file
+// basename and contents).
+func (db *DB) ForEach(feFunc ForEachFunc) error {
+	return db.root.ForEach(feFunc)
 }
 
 // Tables returns all of the tables in the database. Tables are defined as the
@@ -384,6 +395,44 @@ func (table *Table) Delete(key string) error {
 
 	// Remove the file.
 	return os.Remove(file)
+}
+
+// ForEachFunc is the type of the function called for each record fetched by
+// ForEach. The arguments consist of the key and value to process. Returning an
+// error halts the execution of ForEach.
+type ForEachFunc func(key string, value []byte) error
+
+// ForEach executes a function for each key/value pair in the table. Internally,
+// ForEach reads the table directory to find record files, fetches its contents
+// via Get(), and passes the key and retrieved value to feFunc. An error
+// returned by any of these steps, including from the feFunc function, causes
+// ForEach to halt the search and return the error. The feFunc function must not
+// modify the table; doing so results in undefined behavior.
+func (table *Table) ForEach(feFunc ForEachFunc) error {
+	dh, err := os.Open(table.path)
+	if err != nil {
+		return err
+	}
+	var files []os.FileInfo
+	for err != io.EOF {
+		files, err = dh.Readdir(readNum)
+		if err != nil && err != io.EOF {
+			return err
+		}
+		for _, dir := range files {
+			if filepath.Ext(dir.Name()) == recExt && !dir.IsDir() {
+				key := strings.TrimRight(dir.Name(), recExt)
+				val, err := table.Get(key)
+				if err != nil {
+					return err
+				}
+				if err := feFunc(key, val); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
 }
 
 // lockFile tries to acquire a shared or exclusive lock on a file, waiting up to

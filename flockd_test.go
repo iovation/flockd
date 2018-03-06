@@ -501,6 +501,112 @@ func (s *TS) TestTables() {
 	}
 }
 
+func (s *TS) TestForEach() {
+	// Create a bunch of tables.
+	tables := map[string]*Table{s.db.root.path: s.db.root}
+	for _, dir := range []string{"foo", "hi", filepath.Join("foo", "ex")} {
+		tbl, err := s.db.Table(dir)
+		if err != nil {
+			s.T().Fatal("Table", dir, ":", err)
+		}
+		tables[dir] = tbl
+	}
+
+	// Add records to all of them.
+	expRec := make(map[string]map[string]string, len(tables))
+	for dir, tbl := range tables {
+		exp := map[string]string{}
+		for _, key := range []string{"a", "bee", "see"} {
+			data := dir + ":" + key
+			if err := tbl.Set(key, []byte(data)); err != nil {
+				s.T().Fatal("Set", data, err)
+			}
+			exp[key] = data
+		}
+		expRec[dir] = exp
+
+		// Also stick some non-flockd files in there. They should be ignored.
+		for _, fn := range []string{"ignore", "irrelevant.png", "nope.txt"} {
+			path := filepath.Join(tbl.path, fn)
+			if err := ioutil.WriteFile(path, []byte("hi"), 0666); err != nil {
+				s.T().Fatal("WriteFile", path, ":", err)
+			}
+		}
+	}
+
+	// ForEach should find all the root records.
+	records := map[string]string{}
+	s.Nil(s.db.ForEach(func(key string, val []byte) error {
+		records[key] = string(val)
+		return nil
+	}), "Should have no error from ForEach")
+	s.Equal(expRec[s.db.root.path], records, "Should have all root records")
+
+	// Now make sure ForEach gets at them all.
+	for dir, tbl := range tables {
+		records := map[string]string{}
+		s.Nil(tbl.ForEach(func(key string, val []byte) error {
+			records[key] = string(val)
+			return nil
+		}), "Should have no error from %v ForEach")
+		s.Equal(expRec[dir], records, "Should have all %v records", dir)
+	}
+
+	// Should get an error for a nonexistent table directory.
+	if err := os.RemoveAll(tables["hi"].path); err != nil {
+		s.T().Fatal("RemoveAll", tables["hi"].path, ":", err)
+	}
+	err := tables["hi"].ForEach(func(_ string, _ []byte) error {
+		return nil
+	})
+	s.NotNil(err, "Should get error for nonexistent table directory")
+	s.IsType(
+		new(os.PathError), err,
+		"Should have os.PathError for nonexistent directory",
+	)
+
+	// Should get an error for a file we can't open.
+	if err := os.Chmod(filepath.Join(tables["foo"].path, "bee"+recExt), 0000); err != nil {
+		s.T().Fatal("Chmod", err)
+	}
+	err = tables["foo"].ForEach(func(_ string, _ []byte) error {
+		return nil
+	})
+	s.NotNil(err, "Should get error for inaccessible record file")
+	s.IsType(
+		new(os.PathError), err,
+		"Should have os.PathError for inaccessible file",
+	)
+
+	// Should work for an empty table.
+	tbl, err := s.db.Table("empty")
+	if err != nil {
+		s.T().Fatal("Table", err)
+	}
+	s.Nil(tbl.ForEach(func(key string, _ []byte) error {
+		s.Fail("Should find no records but found %v", key)
+		return nil
+	}), "Should get no error from ForEach on empty table")
+}
+
+func (s *TS) TestBigForEach() {
+	// Write out a slew of keys.
+	for i := 0; i < readNum+10; i++ {
+		key := fmt.Sprintf("record-%v", i)
+		if err := s.db.Set(key, []byte("hi")); err != nil {
+			s.T().Fatal("Set", err)
+		}
+	}
+
+	// Make sure we read them all.
+	n := 0
+	s.Nil(s.db.ForEach(func(_ string, _ []byte) error {
+		n++
+		return nil
+	}), "Should get no errors from ForEach on biggish table")
+	s.Equal(readNum+10, n, "Should have found all the records")
+}
+
 func (s *TS) fileContains(path string, data []byte) bool {
 	content, err := ioutil.ReadFile(path)
 	if err != nil {
