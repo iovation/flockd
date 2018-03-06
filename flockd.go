@@ -71,6 +71,11 @@ func New(dir string, timeout time.Duration) (*DB, error) {
 	return &DB{root: root, tables: &sync.Map{}}, nil
 }
 
+// Path returns the root path of the database, as passed to New().
+func (db *DB) Path() string {
+	return db.root.path
+}
+
 // Table creates a table in the database. The table corresponds to a
 // subdirectory of the database root directory. Its name will be the table name
 // plus the extension ".tbl". Keys and values can be written directly to the

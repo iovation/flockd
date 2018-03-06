@@ -49,6 +49,7 @@ func (s *TS) TestNew() {
 
 func (s *TS) TestBasic() {
 	db := s.db
+	s.Equal(s.dir, db.Path(), "Path should be correct")
 	key := "foo"
 	val, err := db.Get(key)
 	s.Nil(val, "Should have no value")
