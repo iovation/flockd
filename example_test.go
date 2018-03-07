@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"source.iovation.com/iol/flockd"
+	"github.com/iovation/flockd"
 )
 
 var timeout = 10 * time.Millisecond

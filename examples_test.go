@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	"source.iovation.com/iol/flockd"
+	"github.com/iovation/flockd"
 )
 
 func tmpdir(name string) string {
