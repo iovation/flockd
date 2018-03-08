@@ -2,6 +2,7 @@ flockd 0.1.0
 ============
 
 [![TravisCI Build Status](https://img.shields.io/travis/iovation/flockd/master.svg)](https://travis-ci.org/iovation/flockd)
+[![Coveralls Coverage](https://img.shields.io/coveralls/github/iovation/flockd.svg)
 [![GoDoc](https://godoc.org/github.com/iovation/flockd?status.svg)](https://godoc.org/github.com/iovation/flockd)
 [![License](https://img.shields.io/github/license/iovation/flockd.svg)](https://github.com/iovation/flockd/blob/master/LICENSE.md)
 
