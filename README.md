@@ -1,9 +1,9 @@
 flockd 0.1.0
 ============
 
-[![TravisCI Build Status](https://img.shields.io/travis/theory/flockd/master.svg)](https://travis-ci.org/theory/flockd)
-[![GoDoc](https://img.shields.io/badge/godoc-flockd-blue.svg)](https://godoc.org/github.com/theory/flockd)
-[![License](https://img.shields.io/github/license/mashape/apistatus.svg)](https://github.com/theory/flockd/blob/master/LICENSE)
+[![TravisCI Build Status](https://img.shields.io/travis/iovation/flockd/master.svg)](https://travis-ci.org/iovation/flockd)
+[![GoDoc](https://img.shields.io/badge/godoc-flockd-blue.svg)](https://godoc.org/github.com/iovation/flockd)
+[![License](https://img.shields.io/github/license/mashape/apistatus.svg)](https://github.com/iovation/flockd/blob/master/LICENSE)
 
 flockd provides a simple file system-based key/value database that uses file
 locking for concurrency safety. Keys correspond to files, values to their
