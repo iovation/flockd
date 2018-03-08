@@ -7,9 +7,9 @@ flockd 0.1.0
 [![License](https://img.shields.io/github/license/iovation/flockd.svg)](https://github.com/iovation/flockd/blob/master/LICENSE.md)
 
 flockd provides a simple file system-based key/value database that uses file
-locking for concurrency safety. Keys correspond to files, values to their
-contents, and tables to directories. Files are share-locked on read (Get) and
-exclusive-locked on write (Set and Delete).
+locking for concurrency safety. Keys correpond to files, values to their
+contents, and tables to directories. Files are share-locked on read (Get and
+ForEach) and exclusive-locked on write (Set, Create, Update, and Delete).
 
 This may be overkill if you have only one application using a set of files in a
 directory. But if you need to sync files between multiple systems, like a
@@ -20,8 +20,10 @@ secondary instances.
 
 In any event, your file system must support proper file locking for this to
 work. If your file system does not, it might still work if file renaming and
-unlinking is atomic and flockd is used exclusively to access files. If not,
-then all bets are off, and you can expect occasional bad reads.
+unlinking is atomic and flockd is used exclusively to access files. If not, then
+all bets are off, and you can expect occasional bad reads.
+
+All of this may turn out to be a bad idea. YMMV. Warranty not included.
 
 Inspirations
 ------------
