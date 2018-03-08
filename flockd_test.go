@@ -145,6 +145,7 @@ func (s *TS) TestPermissionsErrors() {
 		{"Update", func() error { return s.db.Update(key, nil) }},
 		{"Delete", func() error { return s.db.Delete(key) }},
 		{"ForEach", func() error { return s.db.ForEach(nil) }},
+		{"writeTemp", func() error { _, e := s.db.root.writeTemp(key, nil); return e }},
 	} {
 		s.IsType(
 			pathErr, spec.code(),
