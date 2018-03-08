@@ -127,6 +127,32 @@ func (s *TS) TestFiles() {
 	s.fileNotExists(file)
 }
 
+func (s *TS) TestPermissionsErrors() {
+	// All access should fail on permission issues.
+	if err := os.Chmod(s.db.root.path, 0000); err != nil {
+		s.T().Fatal("Chmod", err)
+	}
+
+	pathErr := new(os.PathError)
+	key := "foo"
+	for _, spec := range []struct {
+		meth string
+		code func() error
+	}{
+		{"Get", func() error { _, e := s.db.Get(key); return e }},
+		{"Set", func() error { return s.db.Set(key, nil) }},
+		{"Create", func() error { return s.db.Create(key, nil) }},
+		{"Update", func() error { return s.db.Update(key, nil) }},
+		{"Delete", func() error { return s.db.Delete(key) }},
+		{"ForEachn", func() error { return s.db.ForEach(nil) }},
+	} {
+		s.IsType(
+			pathErr, spec.code(),
+			"%s should return os.PathError for a permissions issue",
+		)
+	}
+}
+
 func (s *TS) TestTable() {
 	db := s.db
 	dirName := "realm"
