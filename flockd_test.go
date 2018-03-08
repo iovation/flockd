@@ -144,7 +144,7 @@ func (s *TS) TestPermissionsErrors() {
 		{"Create", func() error { return s.db.Create(key, nil) }},
 		{"Update", func() error { return s.db.Update(key, nil) }},
 		{"Delete", func() error { return s.db.Delete(key) }},
-		{"ForEachn", func() error { return s.db.ForEach(nil) }},
+		{"ForEach", func() error { return s.db.ForEach(nil) }},
 	} {
 		s.IsType(
 			pathErr, spec.code(),
@@ -357,6 +357,11 @@ func (s *TS) TestDirKeyErrors() {
 	s.DirExists(dir, "Directory %q should still exist", dirName)
 	s.NotNil(s.db.Delete(dirName), "Should have an error from Delete for directory")
 	s.DirExists(dir, "Directory %q should still exist", dirName)
+	s.db.root.path = "nonesuch"
+	s.NotNil(s.db.ForEach(func(k string, v []byte) error {
+		s.Fail("The ForEach function should never be called")
+		return nil
+	}), "Should have an error from ForEach for nonexistant db directory")
 }
 
 func (s *TS) TestDirErrors() {
@@ -578,6 +583,18 @@ func (s *TS) TestForEach() {
 		}), "Should have no error from %v ForEach")
 		s.Equal(expRec[dir], records, "Should have all %v records", dir)
 	}
+
+	// Make sure we return if the function returns.
+	abort := fmt.Errorf("Never mind")
+	i := 0
+	s.Equal(abort, s.db.ForEach(func(key string, val []byte) error {
+		if i == 1 {
+			return abort
+		}
+		i++
+		return nil
+	}), "Should get error returned by function")
+	s.Equal(1, i, "Iteration should have stopped after one function call")
 
 	// Should get an error for a nonexistent table directory.
 	if err := os.RemoveAll(tables["hi"].path); err != nil {
