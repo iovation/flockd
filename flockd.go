@@ -139,7 +139,7 @@ func (db *DB) Delete(key string) error {
 	return db.root.Delete(key)
 }
 
-// ForEach finds each file withj the extension ".kv" in the root directory and
+// ForEach finds each file with the extension ".kv" in the root directory and
 // calls the specififed function, passing the file's key and value (file
 // basename and contents).
 func (db *DB) ForEach(feFunc ForEachFunc) error {
