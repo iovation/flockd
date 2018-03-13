@@ -50,6 +50,7 @@ func (s *TS) TestNew() {
 func (s *TS) TestBasic() {
 	db := s.db
 	s.Equal(s.dir, db.Path(), "Path should be correct")
+	s.Equal("", s.db.root.Name(), "Root table name should be correct")
 	key := "foo"
 	val, err := db.Get(key)
 	s.Nil(val, "Should have no value")
@@ -156,14 +157,15 @@ func (s *TS) TestPermissionsErrors() {
 
 func (s *TS) TestTable() {
 	db := s.db
-	dirName := "realm"
-	subPath := filepath.Join(db.root.path, dirName+tblExt)
+	tblName := "realm"
+	subPath := filepath.Join(db.root.path, tblName+tblExt)
 	s.fileNotExists(subPath)
 
-	tbl, err := s.db.Table(dirName)
+	tbl, err := s.db.Table(tblName)
 	s.Nil(err, "Should have no error from Table")
-	s.DirExists(subPath, "Directory %q should now exist", dirName)
+	s.DirExists(subPath, "Directory %q should now exist", tblName)
 	s.Equal(db.root.timeout, tbl.timeout, "Should have timeout from DB")
+	s.Equal(tblName, tbl.Name(), "Should have table name")
 
 	key := "xoxoxoxoxoxo"
 	file := filepath.Join(subPath, key+recExt)
@@ -215,26 +217,27 @@ func (s *TS) TestMultipleTables() {
 	}
 
 	// Fill out a number of subdirectories.
-	for i, subDir := range tables {
-		subPath := filepath.Join(s.db.root.path, subDir+tblExt)
+	for i, tblName := range tables {
+		subPath := filepath.Join(s.db.root.path, tblName+tblExt)
 		s.fileNotExists(subPath)
 		s.db.root.timeout = time.Millisecond * time.Duration(i+1)
-		tbl, err := s.db.Table(subDir)
-		s.Nil(err, "Should have no error creating Table %v", subDir)
-		s.DirExists(subPath, "Directory %q should now exist", subDir)
+		tbl, err := s.db.Table(tblName)
+		s.Nil(err, "Should have no error creating Table %v", tblName)
+		s.Equal(tblName, tbl.Name(), "Should have set table %v name", tblName)
+		s.DirExists(subPath, "Directory %q should now exist", tblName)
 		s.Equal(
 			s.db.root.timeout, tbl.timeout,
-			"Should have copied root timeout to %v", subDir,
+			"Should have copied root timeout to %v", tblName,
 		)
 
-		mapped, ok := s.db.tables.Load(subDir)
-		s.True(ok, "Should have loaded Table %v", subDir)
-		s.Equal(tbl, mapped, "Should have retained %q", subDir)
+		mapped, ok := s.db.tables.Load(tblName)
+		s.True(ok, "Should have loaded Table %v", tblName)
+		s.Equal(tbl, mapped, "Should have retained %q", tblName)
 
-		val := []byte(subDir)
+		val := []byte(tblName)
 		for _, key := range []string{"strongrrl", "theory", "lily"} {
 			keyPath := filepath.Join(tbl.path, key+recExt)
-			keyTable := filepath.Join(subDir, key+recExt)
+			keyTable := filepath.Join(tblName, key+recExt)
 			s.fileNotExists(keyPath)
 			s.Nil(tbl.Set(key, val), "Should set val in %q", keyTable)
 			s.FileExists(keyPath, "File %q should now exist", keyTable)
@@ -247,12 +250,12 @@ func (s *TS) TestMultipleTables() {
 	}
 
 	// Make sure they haven't overwritten each other and can be deleted.
-	for _, subDir := range tables {
-		tbl, err := s.db.Table(subDir)
-		s.Nil(err, "Should have no error creating Table %v", subDir)
-		val := []byte(subDir)
+	for _, tblName := range tables {
+		tbl, err := s.db.Table(tblName)
+		s.Nil(err, "Should have no error creating Table %v", tblName)
+		val := []byte(tblName)
 		for _, key := range []string{"strongrrl", "theory", "lily"} {
-			keyTable := filepath.Join(subDir, key+recExt)
+			keyTable := filepath.Join(tblName, key+recExt)
 			got, err := tbl.Get(key)
 			s.Nil(err, "Should have no error fetching %q again", keyTable)
 			s.Equal(val, got, "Should again have the value from %q", keyTable)

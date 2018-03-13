@@ -51,6 +51,7 @@ type DB struct {
 
 // Table represents a diretory into which keys and values can be written.
 type Table struct {
+	name    string
 	path    string
 	timeout time.Duration
 }
@@ -64,7 +65,7 @@ func New(dir string, timeout time.Duration) (*DB, error) {
 	if timeout <= 0 {
 		return nil, errors.New("Invalid lock timeout")
 	}
-	root, err := newTable(dir, timeout)
+	root, err := newTable("", dir, timeout)
 	if err != nil {
 		return nil, err
 	}
@@ -84,27 +85,28 @@ func (db *DB) Path() string {
 // directory creation fails. If the table has been created previously for the
 // instance of the database, it will be returned immediately without checking
 // for the existence of the directory on the file system.
-func (db *DB) Table(subdir string) (*Table, error) {
-	if table, ok := db.tables.Load(subdir); ok {
+func (db *DB) Table(name string) (*Table, error) {
+	if table, ok := db.tables.Load(name); ok {
 		return table.(*Table), nil
 	}
 
 	table, err := newTable(
-		filepath.Join(db.root.path, subdir+tblExt),
+		name,
+		filepath.Join(db.root.path, name+tblExt),
 		db.root.timeout,
 	)
 	if err != nil {
 		return nil, err
 	}
-	db.tables.Store(subdir, table)
+	db.tables.Store(name, table)
 	return table, nil
 }
 
-func newTable(path string, timeout time.Duration) (*Table, error) {
+func newTable(name, path string, timeout time.Duration) (*Table, error) {
 	if err := os.MkdirAll(path, 0755); err != nil {
 		return nil, err
 	}
-	return &Table{path: path, timeout: timeout}, nil
+	return &Table{name: name, path: path, timeout: timeout}, nil
 }
 
 // Get returns the value for the key by reading the file named for the key, plus
@@ -153,6 +155,7 @@ func (db *DB) ForEach(feFunc ForEachFunc) error {
 func (db *DB) Tables() ([]*Table, error) {
 	timeout := db.root.timeout
 	rootPath := db.root.path
+	prefix := rootPath + string(os.PathSeparator)
 	tables := []*Table{}
 	if err := filepath.Walk(rootPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -161,12 +164,22 @@ func (db *DB) Tables() ([]*Table, error) {
 		if !info.IsDir() || (filepath.Ext(path) != tblExt && path != rootPath) {
 			return nil
 		}
-		tables = append(tables, &Table{path: path, timeout: timeout})
+		name := ""
+		if path != rootPath {
+			name = strings.TrimSuffix(strings.TrimPrefix(path, prefix), tblExt)
+		}
+		tables = append(tables, &Table{name: name, path: path, timeout: timeout})
 		return nil
 	}); err != nil {
 		return nil, err
 	}
 	return tables, nil
+}
+
+// Name returns the name of the table, which corresonds to the name of the
+// subdirectory without the extension ".tbl".
+func (table *Table) Name() string {
+	return table.name
 }
 
 // Get returns the value for the key by reading the file named for key, plus the
