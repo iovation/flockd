@@ -439,7 +439,7 @@ func (table *Table) ForEach(feFunc ForEachFunc) error {
 		}
 		for _, dir := range files {
 			if filepath.Ext(dir.Name()) == recExt && !dir.IsDir() {
-				key := strings.TrimRight(dir.Name(), recExt)
+				key := strings.TrimSuffix(dir.Name(), recExt)
 				val, err := table.Get(key)
 				if err != nil {
 					return err

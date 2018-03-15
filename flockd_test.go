@@ -552,7 +552,7 @@ func (s *TS) TestForEach() {
 	expRec := make(map[string]map[string]string, len(tables))
 	for dir, tbl := range tables {
 		exp := map[string]string{}
-		for _, key := range []string{"a", "bee", "see"} {
+		for _, key := range []string{"a", "bee", "see", "back"} {
 			data := dir + ":" + key
 			if err := tbl.Set(key, []byte(data)); err != nil {
 				s.T().Fatal("Set", data, err)
