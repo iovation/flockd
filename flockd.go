@@ -1,7 +1,7 @@
 /*
 
 Package flockd provides a simple file system-based key/value database that uses
-file locking for concurrency safety. Keys correpond to files, values to their
+file locking for concurrency safety. Keys correspond to files, values to their
 contents, and tables to directories. Files are share-locked on read (Get and
 ForEach) and exclusive-locked on write (Set, Create, Update, and Delete).
 
@@ -142,14 +142,14 @@ func (db *DB) Delete(key string) error {
 }
 
 // ForEach finds each file with the extension ".kv" in the root directory and
-// calls the specififed function, passing the file's key and value (file
-// basename and contents).
+// calls the specified function, passing the file's key and value (file basename
+// and contents).
 func (db *DB) ForEach(feFunc ForEachFunc) error {
 	return db.root.ForEach(feFunc)
 }
 
 // Tables returns all of the tables in the database. Tables are defined as the
-// root directory and any subdirectory with the extenion ".tbl". This function
+// root directory and any subdirectory with the extension ".tbl". This function
 // actively walks the file system from the root directory to find the table
 // directories and does not cache the results.
 func (db *DB) Tables() ([]*Table, error) {
@@ -176,7 +176,7 @@ func (db *DB) Tables() ([]*Table, error) {
 	return tables, nil
 }
 
-// Name returns the name of the table, which corresonds to the name of the
+// Name returns the name of the table, which corresponds to the name of the
 // subdirectory without the extension ".tbl".
 func (table *Table) Name() string {
 	return table.name
@@ -185,7 +185,7 @@ func (table *Table) Name() string {
 // Get returns the value for the key by reading the file named for key, plus the
 // extension ".kv", from the table directory. The key must not contain a path
 // separator character; if it does, os.ErrInvalid will be returned. If the file
-// does not exist, os.ErrNotExist will be returned. For concurrency safetey, Get
+// does not exist, os.ErrNotExist will be returned. For concurrency safety, Get
 // acquires a shared file system lock on the file before reading its contents.
 // If the file has an exclusive lock on it, Get will wait up to the timeout set
 // for the database for the shared lock before returning a
