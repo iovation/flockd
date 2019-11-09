@@ -142,8 +142,8 @@ func (db *DB) Delete(key string) error {
 }
 
 // ForEach finds each file with the extension ".kv" in the root directory and
-// calls the specififed function, passing the file's key and value (file
-// basename and contents).
+// calls the specified function, passing the file's key and value (file basename
+// and contents).
 func (db *DB) ForEach(feFunc ForEachFunc) error {
 	return db.root.ForEach(feFunc)
 }

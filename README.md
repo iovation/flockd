@@ -1,4 +1,4 @@
-flockd 0.2.1
+flockd 0.3.0
 ============
 
 [![Build Status](https://travis-ci.org/iovation/flockd.svg)](https://travis-ci.org/iovation/flockd)
