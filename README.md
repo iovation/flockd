@@ -1,4 +1,4 @@
-flockd 0.2.0
+flockd 0.2.1
 ============
 
 [![Build Status](https://travis-ci.org/iovation/flockd.svg)](https://travis-ci.org/iovation/flockd)
@@ -7,7 +7,7 @@ flockd 0.2.0
 [![License](https://img.shields.io/github/license/iovation/flockd.svg)](https://github.com/iovation/flockd/blob/master/LICENSE.md)
 
 flockd provides a simple file system-based key/value database that uses file
-locking for concurrency safety. Keys correpond to files, values to their
+locking for concurrency safety. Keys correspond to files, values to their
 contents, and tables to directories. Files are share-locked on read (Get and
 ForEach) and exclusive-locked on write (Set, Create, Update, and Delete).
 
