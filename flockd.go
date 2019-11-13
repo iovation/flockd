@@ -33,7 +33,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/theckman/go-flock"
+	"github.com/gofrs/flock"
 )
 
 const (
