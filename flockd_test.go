@@ -515,7 +515,7 @@ func (s *TS) TestTables() {
 		}
 	}
 
-	// Find and validate all the tables onece more.
+	// Find and validate all the tables once more.
 	found, err = s.db.Tables()
 	s.Nil(err, "Should again have no error from Tables")
 	s.Len(found, len(tables), "Should still have the correct number of tables")
